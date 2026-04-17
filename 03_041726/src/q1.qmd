@@ -1,0 +1,87 @@
+## 单样本 t 检验（One-Sample t-test）
+
+**1. 假设陈述：**
+
+- **$H_0$：**4 缸汽车的平均 `mpg` $\mu \le 23$。
+- **$H_1$：**4 缸汽车的平均 `mpg` $\mu > 23$。
+
+**2. 数据提取与前提假设检查：**
+
+单样本 t 检验要求数据近似服从正态分布（或样本量 $n > 30$）。使用 Shapiro-Wilk 检验和 Q-Q 图来检查正态性。
+
+```{r}
+# 提取 4 缸汽车的 mpg 数据
+data_4cyl <- mtcars$mpg[mtcars$cyl == 4]
+
+# Shapiro-Wilk 正态性检验
+shapiro.test(data_4cyl)
+
+# 绘制 Q-Q 图可视化
+qqnorm(data_4cyl) # 绘制 Q-Q 点图
+qqline(data_4cyl, col = "red") # 添加符合正态分布的期望直线
+```
+
+**前提假设结论：**
+Shapiro-Wilk 检验的 p-value 为 `r format.pval(shapiro.test(data_4cyl)$p.value, digits=3)`，大于 0.05，且 Q-Q 图上的点未偏离参考线附近。因此没有足够的证据拒绝正态性假设，可继续进行 t 检验。
+
+**3. 执行右尾 t 检验：**
+
+```{r}
+# 执行右尾 t 检验（alternative = "greater"）
+t_test_result <- t.test(data_4cyl, mu = 23, alternative = "greater")
+t_test_result
+```
+
+**结论：**
+t 检验的 p-value 为 `r format.pval(t_test_result$p.value, digits=3)`，小于 0.05，因此拒绝 $H_0$。有显著的统计学证据表明，4 缸汽车的平均 `mpg` 大于 23。
+
+---
+
+## 置换检验（Permutation Test）
+
+在课件展示的双样本置换检验中，$H_0$ 假设两组数据来自同一分布。因此我们通过随机重新分配数据标签、计算新的均值差异，重复多次来模拟 $H_0$ 下的均值差异分布。
+
+而对于本次单样本置换检验，$H_0$ 假设样本数据的均值等于某个特定值（这里是 23）。我们通过中心化数据（减去 $H_0$ 均值），然后随机分配正负号、计算新的均值差异，重复多次来模拟 $H_0$ 下的均值差异分布。
+
+```{r}
+# 设置随机种子以保证结果可重复
+set.seed(42)
+
+# 计算原始样本的均值与原假设均值的差（原始统计量）
+mu_null <- 23
+obs_diff <- mean(data_4cyl) - mu_null
+
+# 中心化数据
+centered_data <- data_4cyl - mu_null
+n <- length(data_4cyl)
+B <- 1000 # 置换次数
+
+# 模拟置换过程：随机分配正负号并计算新的均值差异
+perm_diffs <- replicate(B, {
+  # sample(c(-1, 1), n, replace = TRUE) 随机生成 1 或 -1，长度为 n
+  permuted_sample <- centered_data * sample(c(-1, 1), n, replace = TRUE)
+
+  # 计算置换样本的新的均值差异
+  mean(permuted_sample)
+})
+
+# 计算经验 p-value
+# 因为是右尾检验，故统计模拟均值差异中大于等于观测值的比例
+p_value_empirical <- sum(perm_diffs >= obs_diff) / B
+
+cat("均值差异观测值:", obs_diff, "\n")
+cat("经验 p-value:", p_value_empirical, "\n")
+
+# 可视化置换分布
+hist(perm_diffs, breaks = 50, # breaks: 直方图的分箱数量
+     col = "lightblue", border = "white",
+     main = "Permutation Distribution of Mean Differences",
+     xlab = "Mean difference under H0")
+
+# 添加观测值的垂直线
+abline(v = obs_diff, col = "red", lwd = 2, lty = 2)
+legend("topright", legend = "Observed Difference", col = "red", lwd = 2, lty = 2)
+```
+
+**结论：**
+置换检验得出的经验 p-value 为 `r format.pval(p_value_empirical, digits=3)`，小于 0.05（且接近 t 检验的 p-value），这与参数 t 检验的结论一致，进一步证实了 4 缸汽车的平均 mpg 显著大于 23。

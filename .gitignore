@@ -3,6 +3,11 @@
 .vscode-server/
 .vscode-server-insiders/
 
+test_*/
+
+/.quarto/
+**/*.quarto_ipynb
+
 
 
 # 统一设置区 ============================================================

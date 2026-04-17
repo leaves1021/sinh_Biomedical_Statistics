@@ -1,0 +1,78 @@
+## 两独立样本 t 检验的手动计算 (Unpaired t-test)
+
+**1. 假设陈述：**
+
+- **$H_0$：**两种抗生素的抑菌圈直径没有显著差异（$\mu_A - \mu_B = 0$）。
+- **$H_1$：**两种抗生素的抑菌圈直径存在显著差异（$\mu_A - \mu_B \neq 0$）。
+
+**2. 数据输入与基础统计量计算：**
+
+```{r}
+# 输入数据
+group_A <- c(18.5, 19.2, 17.8, 20.1, 19.5, 18.9)
+group_B <- c(15.2, 16.8, 14.9, 16.3, 15.8, 16.1)
+
+# 计算样本量
+n_A <- length(group_A)
+n_B <- length(group_B)
+
+# 计算样本均值
+mean_A <- mean(group_A)
+mean_B <- mean(group_B)
+
+# 计算样本方差
+var_A <- var(group_A)
+var_B <- var(group_B)
+
+cat("样本量:", "n_A =", n_A, ", n_B =", n_B, "\n")
+cat("均值:", "mean_A =", round(mean_A, 3), ", mean_B =", round(mean_B, 3), "\n")
+cat("方差:", "var_A =", round(var_A, 3), ", var_B =", round(var_B, 3), "\n")
+```
+
+**3. 计算合并方差 $s_p^2$：**
+
+已知两组方差相等，故需要计算合并方差 $s_p^2$：
+$$s_p^2 = \frac{(n_A - 1)s_A^2 + (n_B - 1)s_B^2}{(n_A - 1) + (n_B - 1)}$$
+
+```{r}
+# 自由度
+df <- n_A + n_B - 2
+
+# 合并方差
+pooled_var <- ((n_A - 1) * var_A + (n_B - 1) * var_B) / df
+cat("自由度: df =", df, "\n")
+cat("合并方差: s_p^2 =", round(pooled_var, 4), "\n")
+```
+
+**4. 计算标准误 $SE$ 与 t 值：**
+
+标准误 $SE$：
+$$SE = \sqrt{s_p^2 \left(\frac{1}{n_A} + \frac{1}{n_B}\right)}$$
+
+t 值：
+$$t = \frac{\bar{X}_A - \bar{X}_B}{SE}$$
+
+```{r}
+# 标准误
+se <- sqrt(pooled_var * (1/n_A + 1/n_B))
+
+# t 值
+t_stat <- (mean_A - mean_B) / se
+
+cat("标准误: SE =", round(se, 4), "\n")
+cat("t 值: t =", round(t_stat, 4), "\n")
+```
+
+**5. 计算 p-value 及结论：**
+
+开展双尾 t 检验。
+
+```{r}
+# 计算双尾 p-value
+p_value <- 2 * pt(-abs(t_stat), df)
+
+cat("p-value =", format.pval(p_value, digits=4), "\n")
+```
+
+**结论：**
+经过计算，t 值约为 `r round(t_stat, 2)`，对应的 p-value (`r format.pval(p_value, digits=4)`) 远小于 $\alpha = 0.05$。因此，有足够证据拒绝 $H_0$。抗生素 A 和 B 的抑菌效果（抑菌圈直径）存在显著差异。

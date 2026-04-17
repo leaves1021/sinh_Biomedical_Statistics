@@ -1,0 +1,66 @@
+## 配对样本 t 检验（Paired t-test）
+
+**1. 假设陈述：**
+
+- **$H_0$：**新学习技巧对成绩没有显著提高，即前后成绩均值之差 $\mu_{after} - \mu_{before} \le 0$。
+- **$H_1$：**新学习技巧对成绩有显著提高，即前后成绩均值之差 $\mu_{after} - \mu_{before} > 0$。
+
+**2. 数据输入与整理：**
+
+```{r}
+# 输入数据
+student_id <- 1:15
+score_before <- c(75, 80, 70, 85, 65,
+                  90, 78, 72, 88, 76,
+                  84, 70, 68, 85, 77)
+score_after <- c(85, 82, 78, 88, 70,
+                 95, 84, 80, 92, 81,
+                 87, 73, 75, 90, 83)
+
+# 将数据转换为数据框以便可视化
+study_data <- data.frame(
+  Student = factor(rep(student_id, 2)),
+  Condition = factor(rep(c("Before", "After"), each = 15), levels = c("Before", "After")),
+  Score = c(score_before, score_after)
+)
+```
+
+**3. 数据可视化——箱线图：**
+
+绘制箱线图展示使用新技巧前后，学生成绩的分布情况。
+
+```{r}
+# 绘制箱线图
+boxplot(Score ~ Condition, data = study_data,
+        col = c("lightblue", "lightgreen"),
+        main = "Test Scores Before and After New Study Technique",
+        xlab = "Condition",
+        ylab = "Test score")
+
+# 添加个体数据点和连线
+# stripchart() 用于在箱线图上添加个体数据点，segments() 用于添加连接前后成绩的线段
+stripchart(Score ~ Condition,
+           data = study_data, vertical = TRUE, # vertical = TRUE 表示点在垂直方向上分布
+           add = TRUE, pch = 19, col = "#3f3f3f")
+segments(x0 = rep(1, 15), y0 = score_before,
+         x1 = rep(2, 15), y1 = score_after,
+         col = "grey", lty = 1)
+```
+
+*如图所示，几乎所有学生的成绩在使用了新技巧后都有所提升。*
+
+**4. 执行配对 t 检验：**
+
+显著水平 $\alpha = 0.01$，因此需指定 `conf.level = 0.99`。
+
+```{r}
+# 执行右尾配对 t 检验，设置 paired = TRUE
+paired_test_result <- t.test(score_after, score_before,
+                             paired = TRUE, conf.level = 0.99, alternative = "greater")
+paired_test_result
+```
+
+**结论：**
+配对 t 检验 p-value 为 `r format.pval(paired_test_result$p.value, digits=3)`，远小于显著水平 $\alpha = 0.01$。
+
+因此拒绝 $H_0$。有极强的统计学证据表明，使用这种新的学习技巧后，学生的测试成绩有极显著提高（平均提高 `r round(mean(score_after - score_before), 2)` 分）。

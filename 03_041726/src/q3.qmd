@@ -1,0 +1,52 @@
+## 两独立样本 t 检验与方差齐性检验 (Unpaired t-test & F-test)
+
+**1. 假设陈述：**
+
+- **方差齐性检验（F-test）：**
+    - **$H_0$：**治疗组和安慰剂组的 Cr 变化量方差相等（$\sigma_T^2 = \sigma_P^2$）。
+    - **$H_1$：**两组的方差不相等（$\sigma_T^2 \neq \sigma_P^2$）。
+- **均值差异检验（t-test）：**
+    - **$H_0$：**治疗组的平均 Cr 变化量未高于安慰剂组（$\mu_T \le \mu_P$）。
+    - **$H_1$：**治疗组的平均 Cr 变化量显著高于安慰剂组（$\mu_T > \mu_P$）。
+
+**2. 数据输入与方差齐性检验：**
+
+```{r}
+# 1. 输入数据
+delta_Cr_placebo <- c(0.00, 0.01, -0.03, -0.01, -0.02,
+                      -0.01, 0.03, -0.02, 0.00, 0.04,
+                      0.02, -0.02, -0.01, 0.00, -0.03)
+
+delta_Cr_treatment <- c(0.23, 0.08, 0.10, 0.15, 0.09,
+                        0.12, 0.19, 0.08, 0.16, 0.10,
+                        0.19, 0.12, 0.15, 0.13, 0.14)
+
+# 2. 执行方差齐性检验（F-test）
+var_test_result <- var.test(delta_Cr_treatment, delta_Cr_placebo)
+var_test_result
+```
+
+**方差检验分析：**
+F 检验的 p-value 为 `r format.pval(var_test_result$p.value, digits=3)`，小于 0.05，因此拒绝 $H_0$，表明两组的方差不相等（方差不齐）。
+
+**3. 执行独立样本 t 检验：**
+
+由于方差不齐，故设定 `var.equal = FALSE` 来执行 Welch t 检验。
+
+```{r}
+# 3. 执行右尾独立样本 t 检验
+# 因为方差齐性不成立，故设定 var.equal = FALSE
+t_test_result <- t.test(delta_Cr_treatment, delta_Cr_placebo,
+                        var.equal = FALSE, alternative = "greater")
+t_test_result
+
+# 可视化两组差异
+boxplot(delta_Cr_placebo, delta_Cr_treatment, 
+        names = c("Placebo", "Treatment"),
+        col = c("lightblue", "lightcoral"),
+        ylab = "Change in Cr (mg/dL)",
+        main = "Renal Stress Comparison")
+```
+
+**结论：**
+独立样本 t 检验的 p-value 为 `r format.pval(t_test_result$p.value, digits=3)`，远小于 0.05，因此拒绝 $H_0$。有显著的统计学证据表明，治疗组的平均 Cr 变化量显著高于安慰剂组，提示该药可能与肾脏应激增加相关。

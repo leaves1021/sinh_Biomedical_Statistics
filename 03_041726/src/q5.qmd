@@ -1,0 +1,77 @@
+## 实验设计与统计检验方法（Experimental Design and Statistical Test）
+
+**实验设计：** 这是一个配对样本设计，测量的是同一组 10 个细胞系在接受新型干扰素处理前后的病毒载量变化，数据点成对而非独立。
+
+**统计检验方法（选择 Wilcoxon 符号秩检验的原因）：**
+
+1. **样本量小：**只有 10 个配对样本（$n=10$）。
+2. **非正态性：**数据不满足正态性假设。
+3. **配对设计：**每个细胞系在处理前后都有对应的测量值，适合使用配对检验。
+4. 因此，依赖正态性假设（数据点服从正态分布或样本量足够大）的配对 t 检验不适用，必须使用基于 Rank 的非参数检验——**Wilcoxon 符号秩检验**。
+
+---
+
+## Wilcoxon 符号秩检验（Wilcoxon Signed-Rank Test）
+
+**1. 假设陈述：**
+
+- **$H_0$：**处理前后的病毒载量无显著差异。
+- **$H_1$：**处理前后的病毒载量有显著差异。
+
+**2. 数据输入与检验执行：**
+
+```{r}
+# 1. 输入数据
+cell_lines <- 1:10
+load_before <- c(6.5, 7.2, 5.8, 8.1, 6.9,
+                 7.5, 6.3, 7.8, 7.0, 6.7)
+load_after <- c(5.8, 7.0, 5.6, 7.2, 6.1,
+                7.6, 5.5, 7.1, 6.8, 6.2)
+
+# 2. 执行检验（必须设置 paired = TRUE，否则变为 Wilcoxon 秩和检验）
+wilcox_test_result <- wilcox.test(load_before, load_after, paired = TRUE)
+wilcox_test_result
+```
+
+**检验结果分析：**
+Wilcoxon 符号秩检验的 p-value 为 `r format.pval(wilcox_test_result$p.value, digits=3)`，小于 0.01，因此拒绝 $H_0$，表明处理前后的病毒载量存在极显著差异。
+
+---
+
+## 可视化（Boxplot）
+
+题目要求绘制 Boxplot 或 Violin plot。考虑到样本量非常小（$n=10$），不适合绘制小提琴图，因此这里绘制箱线图。
+
+```{r}
+# 将数据转换为长格式方便绘图
+viral_data <- data.frame(
+  Cell_Line = factor(rep(cell_lines, 2)),
+  Timepoint = factor(rep(c("Before", "After"), each = 10), levels = c("Before", "After")),
+  Viral_Load = c(load_before, load_after)
+)
+
+# 绘制箱线图
+boxplot(Viral_Load ~ Timepoint, data = viral_data,
+        col = c("lightpink", "lightblue"),
+        main = "Log10 Viral Load: Before vs. After Treatment",
+        ylab = "Log10 viral load",
+        xlab = "Treatment phase")
+
+# 添加配对数据点和连线
+stripchart(Viral_Load ~ Timepoint,
+           data = viral_data, vertical = TRUE, 
+           add = TRUE, pch = 19, col = "#3f3f3f")
+segments(x0 = rep(1, 10), y0 = load_before, 
+         x1 = rep(2, 10), y1 = load_after,
+         col = "grey", lty = 1)
+```
+
+---
+
+## 生物学研究意义（Biological Research Significance）
+
+如果在检验中得出的 p-value 小于 0.01（正如在我们的计算中所得到的）：
+
+- **统计学意义：**我们有极强的把握（超过 99%）拒绝 $H_0$，认为处理前后的病毒载量存在显著差异。
+- **生物学意义：**结合数据可视化的结果（如图，绝大多数连线呈下降趋势），这意味着该新型干扰素能极显著地抑制细胞内的病毒复制，降低病毒载量。
+- **研发意义：**这一发现对于抗病毒药物的开发具有重要意义，表明该干扰素可能是一个有效的抗病毒治疗候选药物。
