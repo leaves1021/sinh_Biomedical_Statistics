@@ -9,7 +9,9 @@
     - **$H_0$：**治疗组的平均 Cr 变化量未高于安慰剂组（$\mu_T \le \mu_P$）。
     - **$H_1$：**治疗组的平均 Cr 变化量显著高于安慰剂组（$\mu_T > \mu_P$）。
 
-**2. 数据输入与方差齐性检验：**
+**2. 数据输入与正态性检验：**
+
+F 检验要求数据近似服从正态分布；t 检验也要求数据近似服从正态分布（或样本量 $n_T > 30$ 且 $n_P > 30$，但这里不满足）。使用 Shapiro-Wilk 检验和 Q-Q 图来检查两组数据的正态性。
 
 ```{r}
 # 1. 输入数据
@@ -21,7 +23,30 @@ delta_Cr_treatment <- c(0.23, 0.08, 0.10, 0.15, 0.09,
                         0.12, 0.19, 0.08, 0.16, 0.10,
                         0.19, 0.12, 0.15, 0.13, 0.14)
 
-# 2. 执行方差齐性检验（F-test）
+# 2. 执行正态性检验（Shapiro-Wilk test & Q-Q plot）
+# 安慰剂组
+(shapiro_test_placebo <- shapiro.test(delta_Cr_placebo))
+
+qqnorm(delta_Cr_placebo)
+qqline(delta_Cr_placebo, col = "green")
+
+# 治疗组
+(shapiro_test_treatment <- shapiro.test(delta_Cr_treatment))
+
+qqnorm(delta_Cr_treatment)
+qqline(delta_Cr_treatment, col = "red")
+```
+
+**正态性检验分析：**
+
+- 安慰剂组的 Shapiro-Wilk 检验 p-value 为 `r format.pval(shapiro_test_placebo$p.value, digits=3)`，大于 0.05，且 Q-Q 图上的点未偏离参考线附近，因此没有足够的证据拒绝正态性假设。
+- 治疗组的 Shapiro-Wilk 检验 p-value 为 `r format.pval(shapiro_test_treatment$p.value, digits=3)`，大于 0.05，且 Q-Q 图上的点未偏离参考线附近，因此没有足够的证据拒绝正态性假设。
+- 两组数据均满足正态性假设，可以继续进行 F 检验和 t 检验。
+
+**3. 执行方差齐性检验：**
+
+```{r}
+# 3. 执行方差齐性检验（F-test）
 var_test_result <- var.test(delta_Cr_treatment, delta_Cr_placebo)
 var_test_result
 ```
@@ -29,12 +54,12 @@ var_test_result
 **方差检验分析：**
 F 检验的 p-value 为 `r format.pval(var_test_result$p.value, digits=3)`，小于 0.05，因此拒绝 $H_0$，表明两组的方差不相等（方差不齐）。
 
-**3. 执行独立样本 t 检验：**
+**4. 执行独立样本 t 检验：**
 
 由于方差不齐，故设定 `var.equal = FALSE` 来执行 Welch t 检验。
 
 ```{r}
-# 3. 执行右尾独立样本 t 检验
+# 4. 执行右尾独立样本 t 检验
 # 因为方差齐性不成立，故设定 var.equal = FALSE
 t_test_result <- t.test(delta_Cr_treatment, delta_Cr_placebo,
                         var.equal = FALSE, alternative = "greater")

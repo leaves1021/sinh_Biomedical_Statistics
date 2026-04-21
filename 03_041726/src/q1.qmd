@@ -14,7 +14,8 @@
 data_4cyl <- mtcars$mpg[mtcars$cyl == 4]
 
 # Shapiro-Wilk 正态性检验
-shapiro.test(data_4cyl)
+shapiro_test <- shapiro.test(data_4cyl)
+shapiro_test
 
 # 绘制 Q-Q 图可视化
 qqnorm(data_4cyl) # 绘制 Q-Q 点图
@@ -22,7 +23,7 @@ qqline(data_4cyl, col = "red") # 添加符合正态分布的期望直线
 ```
 
 **前提假设结论：**
-Shapiro-Wilk 检验的 p-value 为 `r format.pval(shapiro.test(data_4cyl)$p.value, digits=3)`，大于 0.05，且 Q-Q 图上的点未偏离参考线附近。因此没有足够的证据拒绝正态性假设，可继续进行 t 检验。
+Shapiro-Wilk 检验的 p-value 为 `r format.pval(shapiro_test$p.value, digits=3)`，大于 0.05，且 Q-Q 图上的点未偏离参考线附近。因此没有足够的证据拒绝正态性假设，可继续进行 t 检验。
 
 **3. 执行右尾 t 检验：**
 
