@@ -5,7 +5,11 @@
 - **$H_0$：**新学习技巧对成绩没有显著提高，即前后成绩均值之差 $\mu_{after} - \mu_{before} \le 0$。
 - **$H_1$：**新学习技巧对成绩有显著提高，即前后成绩均值之差 $\mu_{after} - \mu_{before} > 0$。
 
-**2. 数据输入与整理：**
+**2. 数据输入与正态性检验：**
+
+*（即便题目已明确表示“Conduct a paired t-test”，但严谨起见，我们仍需检查配对差值的正态性，以验证 t 检验的前提假设。）*
+
+配对样本 t 检验要求成对数据差值近似服从正态分布（或样本量 $n > 30$，但这里不满足）。使用 Shapiro-Wilk 检验和 Q-Q 图来检查成绩差值的正态性。
 
 ```{r}
 # 输入数据
@@ -17,19 +21,47 @@ score_after <- c(85, 82, 78, 88, 70,
                  95, 84, 80, 92, 81,
                  87, 73, 75, 90, 83)
 
+# 计算成绩差值
+score_diff <- score_after - score_before
+
+# 正态性检验（Shapiro-Wilk test）
+shapiro_test <- shapiro.test(score_diff)
+shapiro_test
+
+# 绘制 Q-Q 图
+qqnorm(score_diff)
+qqline(score_diff, col = "blue")
+```
+
+**正态性检验结论：**
+Shapiro-Wilk 检验的 p-value 为 `r format.pval(shapiro_test$p.value, digits=3)`，大于 0.05，且 Q-Q 图上的点未偏离参考线附近。因此没有足够的证据拒绝正态性假设，可以继续进行配对 t 检验。
+
+**3. 执行配对 t 检验：**
+
+显著水平 $\alpha = 0.01$，因此需指定 `conf.level = 0.99`。
+
+```{r}
+# 执行右尾配对 t 检验，设置 paired = TRUE
+paired_test_result <- t.test(score_after, score_before,
+                             paired = TRUE, conf.level = 0.99, alternative = "greater")
+paired_test_result
+```
+
+**结论：**
+配对 t 检验 p-value 为 `r format.pval(paired_test_result$p.value, digits=3)`，远小于显著水平 $\alpha = 0.01$，因此拒绝 $H_0$。有极显著的统计学证据表明，使用这种新的学习技巧后，学生的测试成绩有极显著提高（平均提高 `r round(mean(score_after - score_before), 2)` 分）。
+
+**4. 数据整理与可视化——箱线图：**
+
+绘制箱线图展示使用新技巧前后，学生成绩的分布情况。
+
+```{r}
 # 将数据转换为数据框以便可视化
 study_data <- data.frame(
   Student = factor(rep(student_id, 2)),
   Condition = factor(rep(c("Before", "After"), each = 15), levels = c("Before", "After")),
   Score = c(score_before, score_after)
 )
-```
 
-**3. 数据可视化——箱线图：**
-
-绘制箱线图展示使用新技巧前后，学生成绩的分布情况。
-
-```{r}
 # 绘制箱线图
 boxplot(Score ~ Condition, data = study_data,
         col = c("lightblue", "lightgreen"),
@@ -47,20 +79,4 @@ segments(x0 = rep(1, 15), y0 = score_before,
          col = "grey", lty = 1)
 ```
 
-*如图所示，几乎所有学生的成绩在使用了新技巧后都有所提升。*
-
-**4. 执行配对 t 检验：**
-
-显著水平 $\alpha = 0.01$，因此需指定 `conf.level = 0.99`。
-
-```{r}
-# 执行右尾配对 t 检验，设置 paired = TRUE
-paired_test_result <- t.test(score_after, score_before,
-                             paired = TRUE, conf.level = 0.99, alternative = "greater")
-paired_test_result
-```
-
-**结论：**
-配对 t 检验 p-value 为 `r format.pval(paired_test_result$p.value, digits=3)`，远小于显著水平 $\alpha = 0.01$。
-
-因此拒绝 $H_0$。有极强的统计学证据表明，使用这种新的学习技巧后，学生的测试成绩有极显著提高（平均提高 `r round(mean(score_after - score_before), 2)` 分）。
+*（如图所示，几乎所有学生的成绩在使用了新技巧后都有所提升。）*

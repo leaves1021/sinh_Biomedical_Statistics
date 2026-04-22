@@ -29,7 +29,11 @@ cat("均值:", "mean_A =", round(mean_A, 3), ", mean_B =", round(mean_B, 3), "\n
 cat("方差:", "var_A =", round(var_A, 3), ", var_B =", round(var_B, 3), "\n")
 ```
 
-**3. 计算合并方差 $s_p^2$：**
+**3. 正态性检验与方差齐性检验：**
+
+*（由于题目已告知抑菌圈直径服从正态分布，且两组方差相等，因此这里不再进行正态性检验和方差齐性检验。但在实际分析中，这些步骤是必要的。）*
+
+**4. 计算合并方差 $s_p^2$：**
 
 已知两组方差相等，故需要计算合并方差 $s_p^2$：
 $$s_p^2 = \frac{(n_A - 1)s_A^2 + (n_B - 1)s_B^2}{(n_A - 1) + (n_B - 1)}$$
@@ -44,7 +48,7 @@ cat("自由度: df =", df, "\n")
 cat("合并方差: s_p^2 =", round(pooled_var, 4), "\n")
 ```
 
-**4. 计算标准误 $SE$ 与 t 值：**
+**5. 计算标准误 $SE$ 与 t 值：**
 
 标准误 $SE$：
 $$SE = \sqrt{s_p^2 \left(\frac{1}{n_A} + \frac{1}{n_B}\right)}$$
@@ -63,13 +67,13 @@ cat("标准误: SE =", round(se, 4), "\n")
 cat("t 值: t =", round(t_stat, 4), "\n")
 ```
 
-**5. 计算 p-value 及结论：**
+**6. 计算 p-value 及结论：**
 
 开展双尾 t 检验。
 
 ```{r}
-# 计算双尾 p-value
-p_value <- 2 * pt(-abs(t_stat), df)
+# 计算双尾 p-value（使用 pt 函数计算 t 分布的累积分布函数）
+p_value <- 2 * pt(-abs(t_stat), df) # 乘以 2 是因为双尾检验
 
 cat("p-value =", format.pval(p_value, digits=4), "\n")
 ```
