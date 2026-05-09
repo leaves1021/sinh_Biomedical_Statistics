@@ -1,0 +1,155 @@
+## Step-by-step 手动计算 One-way ANOVA
+
+### 假设陈述
+
+- **$H_0$：**四种细胞系的感染效率（GFP 阳性百分比）总体均值相等，即 $\mu_{\text{CHO}} = \mu_{\text{HEK293T}} = \mu_{\text{Vero}} = \mu_{\text{BHK-21}}$。
+- **$H_1$：**四种细胞系的感染效率（GFP 阳性百分比）总体均值不全相等，即至少存在两组 $\mu$ 不相等。
+- **显著性水平：**$\alpha = 0.05$。
+
+### 前提条件检验
+
+1. **样本间相互独立**：不同的细胞系培养皿/ROI 之间互不干扰。
+2. **样本为随机选取**：ROI 是在荧光显微镜下随机选择的。
+    - *（以上两点由实验设计本身保证）*
+3. **各总体近似服从正态分布**：下面将使用 Shapiro-Wilk 检验分别检查 4 个细胞系的数据。
+4. **各总体方差近似相同**：下面将使用 Bartlett 检验来评估方差齐性。
+
+```{r}
+library(dplyr)
+library(glue)
+
+# 1. 读取数据
+data <- read.csv("data/raw/homework4-Q3-data.csv",
+                 stringsAsFactors = TRUE) # 将 CellLine 列自动转换为因子（作为分组变量），方便后续分析
+
+# 2. 检验正态性（Shapiro-Wilk test for each cell line）
+# 使用 tapply 对每个分组应用 shapiro.test，并提取 p-value
+p_normality <- tapply(data$GFP_Positive_Percent, data$CellLine, function(x) shapiro.test(x)$p.value)
+cat("正态性检验 p-values（若 > 0.05 则满足正态分布）:\n")
+print(p_normality)
+
+# 3. 检验方差齐性（Bartlett test）
+bartlett_res <- bartlett.test(GFP_Positive_Percent ~ CellLine, data = data)
+cat("\n方差齐性检验 p-value（若 > 0.05 则方差齐）:", bartlett_res$p.value, "\n")
+```
+
+### One-way ANOVA 手动计算
+
+ANOVA 的数学原理是将总平方和（$SST$）分解为组间平方和（$SSB$）和组内平方和（$SSE$）：
+
+- **$SST$ (Total Sum of Squares)**：所有数据点与总均值的差异。
+
+$$SST = \sum_{i=1}^{N} (x_i - \bar{x})^2$$
+
+- **$SSB$ (Between-group Sum of Squares)**：各组均值与总均值的差异（反映处理效应）。
+
+$$SSB = \sum_{j=1}^{k} n_j (\bar{x}_j - \bar{x})^2$$
+
+- **$SSE$ (Within-group Sum of Squares)**：组内各数据点与本组均值的差异（反映随机误差）。
+
+$$SSE = \sum_{j=1}^{k} \sum_{i=1}^{n_j} (x_{ij} - \bar{x}_j)^2$$
+
+自由度：
+
+- 组间自由度 $df_B = k - 1$（$k$ 是组数）
+- 组内自由度 $df_E = N - k$（$N$ 是总样本量）
+
+均方（Mean Squares）：
+
+- 组间均方 $MSB = \frac{SSB}{df_B}$
+- 组内均方 $MSE = \frac{SSE}{df_E}$
+
+F 统计量：
+
+$$F = \frac{MSB}{MSE}$$
+
+```{r}
+# 获取基本参数
+N <- nrow(data)                               # 总样本量（40）
+k <- length(unique(data$CellLine))            # 分组数量（4）
+grand_mean <- mean(data$GFP_Positive_Percent) # 总均值
+
+# 计算各组的样本量、均值和方差
+group_stats <- data %>%
+  group_by(CellLine) %>% # 按 CellLine 分组
+  summarise(
+    n = n(),
+    group_mean = mean(GFP_Positive_Percent),
+    group_var = var(GFP_Positive_Percent)
+  ) # 最终得到一个包含每组样本量、均值和方差的数据框
+group_stats
+
+# 1. 计算 SSB（组间平方和）
+# 公式: sum( n_i * (mean_i - grand_mean)^2 )
+SSB <- sum(group_stats$n * (group_stats$group_mean - grand_mean)^2)
+
+# 2. 计算 SSE（组内平方和）
+# 公式: sum( (n_i - 1) * var_i )
+SSE <- sum((group_stats$n - 1) * group_stats$group_var)
+
+# 3. 计算 SST（总平方和，验证 SST = SSB + SSE）
+SST_manual <- SSB + SSE
+SST_direct <- sum((data$GFP_Positive_Percent - grand_mean)^2) # 直接计算用于验算
+
+# 4. 计算自由度（Degrees of Freedom）
+df_B <- k - 1         # 组间自由度
+df_E <- N - k         # 组内自由度
+
+# 5. 计算均方（Mean Squares）
+MSB <- SSB / df_B     # 组间均方
+MSE <- SSE / df_E     # 组内均方
+
+# 6. 计算 F 统计量和 p-value
+F_stat <- MSB / MSE
+# 查 F 分布表（右尾概率）
+p_value <- pf(F_stat, df_B, df_E,
+              lower.tail = FALSE) # lower.tail = FALSE 表示计算右尾概率，即 P(F > F_stat)
+
+# 打印 ANOVA 表
+cat(glue(
+  "手动计算的 ANOVA 结果:\n",
+  "(SSB+SSE -> SST: {sprintf('%.2f', SST_manual)}, 直接计算 SST: {sprintf('%.2f', SST_direct)})\n",
+  "SSB: {sprintf('%.2f', SSB)}, df: {df_B}, MSB: {sprintf('%.2f', MSB)}\n",
+  "SSE: {sprintf('%.2f', SSE)}, df: {df_E}, MSE: {sprintf('%.2f', MSE)}\n",
+  "F-statistic: {sprintf('%.4f', F_stat)}\n",
+  "p-value: {sprintf('%.2e', p_value)}\n"
+))
+```
+
+**假设检验结论**：
+手动计算得出的 p-value 为 `r sprintf('%.2e', p_value) `，远小于 0.05，拒绝 $H_0$。这说明**至少有两种细胞系**对该病毒的易感性（感染效率）存在显著差异。
+
+---
+
+## 事后检验与数据可视化
+
+ANOVA 表明“整体有差异”，需要使用 **Tukey's HSD（Honest Significant Difference）**进行两两多重比较，以进一步确定是哪几个细胞系之间存在差异。Tukey 方法内置了多重比较的 p 值校正，以控制假阳性率。
+
+*（注：由于 R 的 `TukeyHSD()` 函数强制要求输入一个 `aov` 类的模型对象，此处使用 `aov()` 函数快速拟合模型。）*
+
+```{r}
+# 1. Tukey's HSD 事后检验
+# 构建 aov 模型对象
+anova_model <- aov(GFP_Positive_Percent ~ CellLine, data = data)
+
+# 运行 Tukey 检验
+tukey_res <- TukeyHSD(anova_model)
+print(tukey_res)
+
+# 2. 数据可视化：绘制箱线图
+boxplot(GFP_Positive_Percent ~ CellLine, data = data,
+        col = c("#E41A1C", "#377EB8", "#4DAF4A", "#984EA3"),
+        main = "Viral Infection Efficiency Across Cell Lines",
+        ylab = "% GFP positive",
+        xlab = "Cell line",
+        outline = FALSE) # 隐藏离群值轮廓，因为要叠加散点
+
+# 叠加个体数据点，展示原始数据分布
+stripchart(GFP_Positive_Percent ~ CellLine, data = data, 
+           vertical = TRUE, add = TRUE,
+           method = "jitter", # method = "jitter" 可以在 x 轴方向上稍微抖动点的位置，避免重叠
+           pch = 21, bg = "grey80", col = "black")
+```
+
+**图表与结果解释**：
+除 HEK293T-BHK21 这对比较外，其他两两比较的 adjusted p-value 都小于 0.05，说明 CHO、HEK293T、Vero 三个细胞系之间的感染效率存在显著差异。箱线图显示 Vero 细胞系的感染效率明显高于其他三个细胞系，而 CHO 细胞系的感染效率最低。

@@ -1,4 +1,4 @@
-## 两独立样本 t 检验的手动计算 (Unpaired t-test)
+## 两独立样本 t 检验的手动计算（Unpaired t-test）
 
 **1. 假设陈述：**
 

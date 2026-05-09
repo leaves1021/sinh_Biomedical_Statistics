@@ -1,4 +1,4 @@
-## 两独立样本 t 检验与方差齐性检验 (Unpaired t-test & F-test)
+## 两独立样本 t 检验与方差齐性检验（Unpaired t-test & F-test）
 
 **1. 假设陈述：**
 

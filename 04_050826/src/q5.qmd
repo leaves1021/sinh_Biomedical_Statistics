@@ -1,0 +1,75 @@
+## 非参数多组比较（Kruskal-Wallis test）
+
+### 检验方法选择与假设陈述
+
+由于题目明确说明数据不满足正态性和方差齐性假设，且为完全随机设计（独立样本），故采用 **Kruskal-Wallis 检验**。
+
+- **$H_0$：**三种药物处理下，小鼠体重增加量的总体分布相同（即来自中位数相同的总体、不存在显著差异）。
+- **$H_1$：**至少有一种药物处理下的小鼠体重增加量分布与其他组存在显著差异。
+- **显著性水平：**$\alpha = 0.05$。
+
+---
+
+### 数据输入与可视化
+
+```{r}
+# 1. 输入数据
+drug_A <- c(145, 152, 138, 160, 147,
+            155, 142, 149, 153, 140)
+drug_B <- c(136, 129, 142, 131, 140,
+            135, 138, 133, 145, 130)
+drug_C <- c(120, 125, 118, 132, 121,
+            128, 115, 124, 130, 122)
+
+# 构建数据框
+weight_data <- data.frame(
+  WeightGain = c(drug_A, drug_B, drug_C),
+  Drug = factor(rep(c("Drug A", "Drug B", "Drug C"), each = 10))
+)
+
+# 2. 数据可视化：箱线图叠加散点
+boxplot(WeightGain ~ Drug, data = weight_data,
+        col = c("#FDB462", "#8DD3C7", "#BEBADA"),
+        main = "Weight Gain in Mice Across Drug Treatments",
+        ylab = "Weight gain (g)",
+        xlab = "Treatment group",
+        outline = FALSE) # outline = FALSE 去掉默认的离群点显示
+
+stripchart(WeightGain ~ Drug, data = weight_data, 
+           vertical = TRUE, add = TRUE, method = "jitter", 
+           pch = 21, bg = "grey50", col = "black")
+```
+
+---
+
+### 执行 Kruskal-Wallis 检验
+
+```{r}
+# 执行 Kruskal-Wallis 检验
+kw_test <- kruskal.test(WeightGain ~ Drug, data = weight_data)
+kw_test
+```
+
+**结论：**
+Kruskal-Wallis 检验的 p-value 为 `r kw_test$p.value `，远小于 $\alpha = 0.05$。因此，拒绝 $H_0$，认为至少存在一种药物处理下的小鼠体重增加量分布与其他组存在显著差异。
+
+---
+
+### 事后检验
+
+已知“整体有差异”，进一步探究“究竟是哪两两药物之间存在差异”。对于 Kruskal-Wallis 检验，常用带有多重假设校正的**配对 Wilcoxon 秩和检验（Pairwise Wilcoxon Rank Sum Test）**。这里使用 BH 法控制 FDR。
+
+*（Tukey's HSD 依赖正态性和方差齐性假设，只能作为标准 ANOVA 的事后检验，此处不适用。）*
+
+```{r}
+# 执行配对 Wilcoxon 检验，并使用 BH 法进行 p 值校正
+posthoc_test <- pairwise.wilcox.test(weight_data$WeightGain, weight_data$Drug,
+                                     p.adjust.method = "BH", exact = FALSE)
+posthoc_test
+```
+
+**结论：**
+
+- Drug A vs Drug B 的 p-value 为 `r posthoc_test$p.value["Drug B", "Drug A"] `，小于 0.05，说明 Drug A 和 Drug B 之间存在显著差异。
+- Drug A vs Drug C 的 p-value 为 `r posthoc_test$p.value["Drug C", "Drug A"] `，小于 0.05，说明 Drug A 和 Drug C 之间存在显著差异。
+- Drug B vs Drug C 的 p-value 为 `r posthoc_test$p.value["Drug C", "Drug B"] `，小于 0.05，说明 Drug B 和 Drug C 之间存在显著差异。

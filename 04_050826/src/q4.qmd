@@ -1,0 +1,112 @@
+## 正态性与方差齐性假设检验
+
+在进行 Two-way ANOVA 之前，必须确保分类/分组变量（Factor A 和 Factor B）在 R 中被正确识别为因子（Factor）类型，而不是普通的字符。
+
+```{r}
+# 读取数据并转换数据类型
+data <- read.csv("data/raw/homework4-Q4-data.csv", stringsAsFactors = TRUE)
+
+# 确保 A 和 B 被识别为因子
+data$A <- as.factor(data$A)
+data$B <- as.factor(data$B)
+
+# 查看各组样本量，确认是否为均衡设计
+table(data$A, data$B)
+```
+
+### 正态性检验
+
+拟合完整的双因素交互模型，然后提取其**残差（Residuals）**进行 Shapiro-Wilk 检验。
+
+```{r}
+# 拟合完整模型以提取残差
+model_full <- aov(Weight ~ A * B, data = data)
+
+# 对残差进行 Shapiro-Wilk 检验
+(shapiro_res <- shapiro.test(residuals(model_full)))
+```
+
+**结论**：p-value 为 `r sprintf('%.4f', shapiro_res$p.value) `，大于 0.05，不能拒绝正态性假设，数据满足正态性假设要求。
+
+### 方差齐性检验
+
+题目要求分别对 Factor A 和 Factor B 检查。为保证严谨，也加入对所有 6 个实验组合（`interaction(A, B)`）的整体方差齐性检验。
+
+```{r}
+# 针对 Factor A（温度）
+(bartlett_A <- bartlett.test(Weight ~ A, data = data))
+
+# 针对 Factor B（饮食）
+(bartlett_B <- bartlett.test(Weight ~ B, data = data))
+
+# 针对 A*B 的交互组别（最严谨）
+(bartlett_AB <- bartlett.test(Weight ~ interaction(A, B), data = data))
+```
+
+**结论**：
+
+- Factor A 的方差齐性 p-value 为 `r sprintf('%.4f', bartlett_A$p.value) `，大于 0.05，满足方差齐性假设。
+- Factor B 的方差齐性 p-value 为 `r sprintf('%.4f', bartlett_B$p.value) `，大于 0.05，满足方差齐性假设。
+- 各组合之间的整体方差齐性 p-value 为 `r sprintf('%.4f', bartlett_AB$p.value) `，也大于 0.05，满足方差齐性假设。
+
+---
+
+## 不考虑交互作用的主效应分析
+
+使用**加法模型（`A + B`）**，即假设温度和饮食对体重的影响是完全独立叠加的，互不干扰。
+
+```{r}
+# 拟合无交互作用的模型
+model_add <- aov(Weight ~ A + B, data = data)
+
+# 输出 ANOVA 表
+cat("--- 不考虑交互作用的 ANOVA 表 ---\n")
+summary(model_add)
+```
+
+**结论**：
+
+- Factor A（温度）的 p-value 为 `r sprintf('%.4f', summary(model_add)[[1]][["Pr(>F)"]][1]) `，远小于 0.05，说明温度对体重有显著影响。
+- Factor B（饮食）的 p-value 为 `r sprintf('%.4f', summary(model_add)[[1]][["Pr(>F)"]][2]) `，大于 0.05，说明饮食对体重没有显著影响。
+
+---
+
+## 考虑交互作用与事后检验
+
+引入**交互作用模型（`A * B`）**，即假设温度和饮食之间可能存在交互作用（不同温度下饮食的效果不同，或不同饮食下温度的效果不同）。
+
+```{r}
+# 1. 拟合带交互作用的模型
+model_int <- aov(Weight ~ A * B, data = data)
+cat("--- 包含交互作用的 ANOVA 表 ---\n")
+summary(model_int)
+
+# 绘制交互作用图以直观理解数据
+interaction.plot(x.factor = data$A, trace.factor = data$B, response = data$Weight,
+                 type = "b", col = c("blue", "red"), pch = 19,
+                 xlab = "Temperature (factor A)", ylab = "Mean weight",
+                 trace.label = "Diet (factor B)",
+                 main = "Interaction Plot of Temperature and Diet on Mouse Weight")
+
+# 2. 事后多重比较（Tukey's HSD）
+# 直接提取 A:B 组合的对比结果
+tukey_res <- TukeyHSD(model_int, "A:B")
+tukey_df <- as.data.frame(tukey_res$`A:B`)
+
+# 3. 筛选并识别与 A2B1 组相比具有显著差异的组别
+# 使用 grepl 匹配行名中包含 "A2:B1" 的所有对比对
+tukey_A2B1 <- tukey_df[grepl("A2:B1", rownames(tukey_df)), ]
+
+# 找出具有显著差异的组别（p adj < 0.05）
+significant_diff_from_A2B1 <- tukey_A2B1[tukey_A2B1$`p adj` < 0.05, ]
+
+cat("\n--- 与 A2B1 组（25°C, Standard Diet）相比具有显著差异的组别 ---\n")
+print(significant_diff_from_A2B1)
+```
+
+**结论**：
+
+- **A 的主效应**：`A` 的 p-value 为 `r sprintf('%.4f', summary(model_int)[[1]][["Pr(>F)"]][1]) `，远小于 0.05，说明温度对体重有显著影响。
+- **B 的主效应**：`B` 的 p-value 为 `r sprintf('%.4f', summary(model_int)[[1]][["Pr(>F)"]][2]) `，大于 0.05，说明饮食对体重没有显著影响。
+- **交互作用**：`A:B` 的 p-value 为 `r sprintf('%.4f', summary(model_int)[[1]][["Pr(>F)"]][3]) `，大于 0.05，说明温度和饮食之间没有显著的交互作用。（由交互作用图也可见，线条基本平行，未表现出明显的交互模式。）
+- **与 A2B1 组的差异**：多重比较表明，仅 A1B1 组（4°C, Standard Diet）与 A1B2 组（4°C, High-fat Diet）之间存在显著差异（p adj < 0.05）。其他组别与 A2B1 组之间的差异均不显著。

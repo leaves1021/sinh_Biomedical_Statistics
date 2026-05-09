@@ -1,0 +1,144 @@
+## 建立自动化统计分析流程
+
+两组数据（S、R）均为 $n \le 30$ 的小样本，自动化统计分析流程逻辑如下：
+
+1. **正态性检验**：对两组数据分别执行 **Shapiro-Wilk test**。
+2. **方差齐性检验**：若两组均满足正态分布（$p > 0.05$），则执行 **F-test**。
+   - 方差齐（$p > 0.05$) $\rightarrow$ **Student's t-test**
+   - 方差不齐（$p \le 0.05$）$\rightarrow$ **Welch's t-test**
+3. 若任意一组不满足正态分布（$p \le 0.05$），则跳过方差齐性检验，直接使用非参数检验 $\rightarrow$ **Wilcoxon rank-sum test**。
+
+```{r}
+library(dplyr)
+library(knitr) # 用于格式化表格输出
+
+# 读取数据
+data <- read.csv("data/raw/homework4-Q1-data.csv",
+                 stringsAsFactors = FALSE) # 避免字符串被自动转换为因子
+
+# 初始化空数据框用于存储结果
+results <- data.frame(
+  Gene = character(),      # 基因名称
+  Method = character(),    # 使用的检验方法
+  p_value = numeric(),     # 原始 p-value
+  log2FC = numeric(),      # log2 fold change
+  stringsAsFactors = FALSE
+)
+
+# 遍历每一个基因执行自动化流程
+for (i in 1:nrow(data)) {
+  # 提取基因名称
+  gene_name <- data$Gene[i]
+
+  # 提取 Condition A（Sensitive）和 Condition B（Resistant）
+  S <- as.numeric(data[i, 2:11])
+  R <- as.numeric(data[i, 12:21])
+
+  # 1. Shapiro-Wilk 正态性检验
+  p_norm_S <- shapiro.test(S)$p.value
+  p_norm_R <- shapiro.test(R)$p.value
+
+  if (p_norm_S > 0.05 && p_norm_R > 0.05) {
+    # 2. 正态前提满足，进行方差齐性检验，根据结果选择 t 检验类型
+    p_var <- var.test(R, S)$p.value
+    
+    if (p_var > 0.05) {
+      # 方差齐，使用 Student's t-test
+      method <- "Student's t-test"
+      test_res <- t.test(R, S, var.equal = TRUE) # 默认是双尾检验
+    } else {
+      # 方差不齐，使用 Welch's t-test
+      method <- "Welch's t-test"
+      test_res <- t.test(R, S, var.equal = FALSE)
+    }
+  } else {
+    # 3. 违反正态性假设，跳过方差齐性检验，直接使用非参数检验
+    method <- "Wilcoxon rank-sum test"
+    test_res <- wilcox.test(R, S) # 默认是双尾检验，且不需要设置 var.equal 参数
+  }
+
+  # 提取 p-value 和 log2FC
+  p_val <- test_res$p.value
+  log2fc <- mean(R) - mean(S)
+
+  # 记录结果（将分析结果按行添加到 results 数据框中）
+  results <- rbind(results, data.frame(
+    Gene = gene_name,
+    Method = method,
+    p_value = p_val,
+    log2FC = log2fc
+  ))
+}
+```
+
+---
+
+## BH-FDR 校正
+
+### BH-FDR 公式与解释
+
+Benjamini-Hochberg（BH）方法用于控制错误发现率（False Discovery Rate, FDR），
+即在所有拒绝 $H_0$（宣称有显著差异/阳性）的基因中，假阳性结果所占的预期比例。
+
+**计算公式：**
+将 $m$ 次检验的 p 值从小到大排列：$p_{(1)} \le p_{(2)} \le \dots \le p_{(m)}$。
+对于第 $i$ 个排位的检验，其校正后的 p 值（Adjusted p-value / q-value）计算如下：
+
+$$P.adj_{(i)} = \min \left( p_{(i)} \times \frac{m}{i},\ \min_{j > i} P.adj_{(j)} \right)$$
+
+实践中，该公式从排名最大的检验（$i = m$）开始向前迭代计算，
+确保校正后的 p 值保持单调不减。
+
+- **解读**：某个基因的 p 值会乘以一个调整系数 $\frac{m}{i}$。
+  排名 $i$ 越靠后（p 值越大），系数 $\frac{m}{i}$ 越小，意味着乘法惩罚越轻；
+  排名越靠前（p 值越小），系数越大，惩罚越重——当 $i=1$ 时，
+  惩罚力度等同于课堂上提到的最保守的 Bonferroni 校正（直接乘以检验次数 $m$）。
+  但由于这些检验本身的 p 值极小，即便系数较大，校正后仍常常保持显著。
+  公式中对排名更靠后的 $P.adj$ 取最小值，是为了保证单调性：
+  校正后的 p 值不会随排名升高而出现下降，使结果在解释上自洽。
+  最终，校正后的 p 值被截断在 1 以内，以保持其概率的含义。
+  该方法通过这一动态调整机制，在发现新信号和控制假阳性之间取得了平衡。
+
+### 执行 BH 校正
+
+```{r}
+# 利用 p.adjust 函数进行 BH-FDR 校正
+results$q_value <- p.adjust(results$p_value, method = "BH")
+
+# 格式化输出结果，便于阅读
+results_display <- results %>%
+  mutate(
+    p_value = formatC(p_value, format = "e", digits = 2),
+    q_value = formatC(q_value, format = "e", digits = 2),
+    log2FC = round(log2FC, 2)
+  ) # "formatC()" 函数用于科学计数法（指定 format = "e"）格式化 p 值
+
+kable(results_display,
+      caption = "Automated Hypothesis Testing & FDR Correction Results")
+```
+
+---
+
+## RNA-seq 偏好 BH-FDR 而非 Bonferroni 的可能原因
+
+在 RNA-seq 等高通量组学分析中，BH-FDR 被广泛采用，而极少使用 Bonferroni（$P_{adj} = p \times m$），主要基于以下统计学与生物学考量：
+
+1. **FWER 与 FDR 的本质区别**：Bonferroni 严格控制族错误率（Family-wise error rate, FWER），其目标是“在 $m$ 次检验中，出现至少一个假阳性的概率都 $\le \alpha$”。对于 RNA-seq（动辄 $m > 20000$），这种控制过于严苛保守。而 FDR 允许一定比例的假阳性（如设 $FDR < 0.05$ 意味着选出的 100 个差异基因中允许约 5 个是假阳性），这在发现型研究中完全可以接受。
+2. **BH 可降低 Type II error（提高统计功效）**：课堂上重点提到，Bonferroni 由于 $m$ 极大，可能会将显著性阈值压低到如 $p < 2.5 \times 10^{-6}$，这会导致**假阴性率 $\beta$ 激增**，丢失大量真正具有生物学意义的弱差异表达基因，**极大损害统计功效（$1 - \beta$）**。
+3. **基因间的相关性结构实际上有利于 BH**：BH 方法在检验相互独立或正相关依赖时，被严格证明能控制 FDR。RNA-seq 中基因表达的正相关性（如共同通路的基因协同变化）恰好满足这一条件。相比之下，Bonferroni 虽然对任何依赖结构都成立（基于 Boole 不等式，不需要独立性），但在测试正相关时会变得更加保守，进一步损害统计功效。
+
+---
+
+## t 检验前的前提假设检验必要性及离群值影响
+
+### 为何需要执行正态性检验和方差齐性检验？
+
+- **正态性检验**：Student's 和 Welch's t 检验的底层理论推导（构建 t 统计量）均假设样本所属的总体服从正态分布。当样本量较小（如本题 $n=10$），无法依赖中心极限定理，若强行对偏态数据进行 t 检验，会导致真实的 Type I error 偏离预设的 $\alpha$ 水平。
+- **方差齐性检验**：标准的 Student's t 检验在计算标准误时，会使用**合并方差**。如果两组方差差异悬殊却强行合并，会导致方差较大的一组被低估、较小的一组被高估，得出错误结果。若方差不齐，必须转而使用调整了自由度的 **Welch's t-test**。（此外，合并方差的优势在于自由度略高，因此会有更大的统计功效，且置信区间更窄。但前提是方差齐性成立，否则反而适得其反。）
+
+### 离群值对 t 检验的影响
+
+观察本题中的 *MYC*、*BCL2* 等基因的数据可以发现个别明显的极端值（如 15.5），离群值对 t 检验会产生如下影响：
+
+- **影响均值**：离群值会极大地把样本均值向自身方向“拉扯”。这可能导致原本无差异的两组被强行拉出假差异（假阳性）。
+- **影响方差**：方差计算中采用的是偏差的平方 $(x - \bar{x})^2$。一个离群值会使该组的样本方差增大，进而增大 t 检验的分母（标准误）。此时，即使两组真实的均值存在差异，也会因为分母过大导致 t 统计量减小，掩盖真实差异（假阴性）。

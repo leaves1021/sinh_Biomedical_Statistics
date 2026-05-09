@@ -1,0 +1,72 @@
+## 计算给定样本量下的统计功效
+
+**题目条件**：显著性水平 $\alpha = 0.05$，目标检测效应量 Cohen's $d = 0.6$，每组样本量 $n = 35$。求统计功效。
+
+**检验类型**：大样本量（$n > 30$）条件下，两独立样本的均值比较，应使用两样本 t 检验。
+
+```{r}
+library(pwr)
+
+# 定义已知常量
+alpha <- 0.05   # 显著性水平
+target_d <- 0.6 # 目标效应量（Cohen's d）
+
+# 本小题给定的样本量
+n_per_group <- 35
+
+# 计算统计功效
+# 将需要求解的参数（power）设置为 NULL
+res_1 <- pwr.t.test(n = n_per_group, d = target_d, sig.level = alpha, power = NULL, 
+                    type = "two.sample", alternative = "two.sided")
+res_1
+```
+
+**结论:**
+如果每组有 `r n_per_group` 株水稻幼苗，该实验检测出中等效应量（$d=0.6$）的统计功效约为 `r paste0(round(res_1$power * 100, 1), "%")`。
+
+---
+
+## 计算达到目标功效所需的最小样本量
+
+**题目条件**：显著性水平 $\alpha = 0.05$，目标效应量 $d = 0.6$，目标功效 Power $= 0.80$。求每组所需最小样本量 $n_{\text{min}}$。
+
+**检验类型**：同样是两独立样本的均值比较，按题目要求使用两样本 t 检验。
+
+```{r}
+# 本小题给定的目标功效
+target_power <- 0.80
+
+# 计算所需最小样本量
+# 将需要求解的参数（n）设置为 NULL
+res_2 <- pwr.t.test(n = NULL, d = target_d, sig.level = alpha, power = target_power, 
+                    type = "two.sample", alternative = "two.sided")
+res_2
+
+# 向上取整得到实际需要的幼苗数量
+min_n <- ceiling(res_2$n)
+```
+
+**结论:**
+为了使统计功效达到 `r paste0(target_power * 100, "%")`，计算得出的理论样本量为 `r round(res_2$n, 3)`。由于数量必须是整数，需要向上取整。因此，每组至少需要 `r min_n` 株水稻幼苗。
+
+---
+
+## 计算在受限样本量下能检测到的最小效应量
+
+**题目条件**：由于温室空间限制，每组最多只能容纳 $n = 20$ 株幼苗。显著性水平 $\alpha = 0.05$。题目未指定目标功效，假定依然为 `r target_power`。求在该受限条件下能检测到的最小效应量 $d_{\text{min}}$。
+
+**检验类型**：还是两独立样本的均值比较，按题目要求使用两样本 t 检验。
+
+```{r}
+# 本小题给定的受限样本量
+limited_n <- 20
+
+# 计算最小可检测效应量
+# 将需要求解的参数（d）设置为 NULL
+res_3 <- pwr.t.test(n = limited_n, d = NULL, sig.level = alpha, power = target_power, 
+                    type = "two.sample", alternative = "two.sided")
+res_3
+```
+
+**结论:**
+当受限于空间，每组只能种植 `r limited_n` 株幼苗时（且要保证 `r paste0(target_power * 100, "%")` 的统计功效），该实验所能检测到的最小效应量 Cohen's $d$ 为 `r round(res_3$d, 3)`。（注意：这个效应量比题目中原先设定的 `r target_d` 要大，意味着在样本量受限的情况下，只有更大的效应才能被检测出来。）
