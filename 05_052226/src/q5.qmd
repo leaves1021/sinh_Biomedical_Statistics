@@ -1,0 +1,109 @@
+## 拟合完整的多元逻辑回归模型
+
+题目明确指出，必须将 `race`、`smoke` 和 `ht` 这些本质上是分类变量但被存储为整数的数据转换为因子（factor）类型。这对逻辑回归极其重要，否则 R 会把它们当成连续的数值变量来计算斜率，从而得出毫无意义的结果。
+
+```{r}
+# 加载必要的包和数据
+library(MASS)
+data(birthwt)
+
+# 将指定变量转换为分类因子（Factors）
+birthwt$race <- as.factor(birthwt$race)
+birthwt$smoke <- as.factor(birthwt$smoke)
+birthwt$ht <- as.factor(birthwt$ht)
+
+# 确保因变量低体重（low）也是二元形式的，可以直接用于 glm()
+```
+
+在 R 中拟合逻辑回归，我们使用 `glm()` 函数，且必须将 `family` 参数设置为 `binomial`（二项分布）（原因是响应变量 `low` 是二元的）。
+
+```{r}
+# 拟合包含所有指定预测变量的模型（Model A）
+model_a <- glm(low ~ age + lwt + race + smoke + ht, 
+               data = birthwt, 
+               family = binomial)
+summary(model_a)
+```
+
+**大致结果分析**：
+
+- `age` 的 p-value 大于 0.05，表明在控制了其他变量后，母亲年龄对新生儿低体重的影响不显著。
+- 其他变量（`lwt`, `race2`, `race3`, `smoke1`, `ht1`）的 p-value 都小于 0.05，表明它们在统计学上显著影响低体重的发生。
+
+---
+
+## 特征降维与构建简化模型
+
+题目要求剔除在模型（a）中不显著的特征（$p \ge 0.05$），保留显著的特征重新构建模型。根据分析结果，剔除 `age`，保留 `lwt`、`race`、`smoke` 和 `ht`。
+
+```{r}
+# 构建简化后的回归模型（Model B）
+# 保留显著特征：lwt, race, smoke, ht
+model_b <- glm(low ~ lwt + race + smoke + ht, 
+               data = birthwt, 
+               family = binomial)
+summary(model_b)
+```
+
+---
+
+## 模型比较：似然比检验（Likelihood Ratio Test）
+
+剔除一些变量得到了一个更简单的“嵌套模型”后，我们需要证明：**这种简化是否导致了模型预测能力的显著下降？**
+对于逻辑回归（GLM），我们不能使用普通的 ANOVA 中的 F 检验，而必须使用基于卡方分布的**似然比检验**。
+
+```{r}
+# 使用卡方检验比较两个嵌套模型
+model_diff_test <- anova(model_b, model_a, test = "Chisq")
+print(model_diff_test)
+
+# 提取 p-value
+p_value_diff <- model_diff_test$`Pr(>Chi)`[2]
+```
+
+**结论**：
+P-value 为 `r sprintf('%.4f', p_value_diff) `，大于 0.05，说明剔除 `age` 后模型的预测能力没有显著下降。因此，简化后的模型（Model B）在统计学上是合理的。
+
+---
+
+## 机器学习初步：训练集与测试集划分
+
+这里引入监督学习中最核心的范式：不要在用来训练模型的数据上测试模型的准确率（这会导致过拟合评估）。我们随机抽取 100 个样本作为训练集（Training set），剩下的 89 个作为测试集（Test set）。
+
+```{r}
+# 1. 设置随机种子，保证每次抽样的结果完全一致
+set.seed(320) # 此处疑似暗示 320 大院（笑）
+
+# 2. 生成训练集的索引（从总行数中随机抽取 100 个数字）
+train_indices <- sample(1:nrow(birthwt), 100, replace = FALSE) # replace = FALSE（默认）表示不放回抽样
+
+# 3. 划分训练集和测试集
+train_data <- birthwt[train_indices, ]
+test_data <- birthwt[-train_indices, ] # 负号代表排除这些行
+
+# 4. 使用训练集重新拟合模型（a）
+model_train <- glm(low ~ age + lwt + race + smoke + ht, 
+                   data = train_data, 
+                   family = binomial)
+
+# 5. 对测试集进行预测
+# 这一步的意思是：使用训练好的模型 `model_train` 来预测测试集 `test_data` 中每个样本的低体重发生概率（而不是直接预测类别）
+# 注意：type = "response" 告诉 R 输出介于 0 到 1 之间的发生概率，而不是对数几率（logit）
+predicted_probs <- predict(model_train, newdata = test_data, type = "response")
+
+# 6. 将概率转换为分类结果（阈值为 0.5）
+predicted_class <- ifelse(predicted_probs >= 0.5, 1, 0)
+
+# 7. 计算准确率
+# 将预测类别与测试集的真实类别 (test_data$low) 进行对比
+correct_predictions <- sum(predicted_class == test_data$low) # 计算正确预测的数量
+total_predictions <- nrow(test_data) # 计算测试集的总样本数
+accuracy <- correct_predictions / total_predictions
+
+# 打印结果
+cat("模型在独立测试集上的预测准确率为:", round(accuracy * 100, 2), "%\n")
+
+# 输出混淆矩阵以提供更多细节
+# 混淆矩阵（Confusion Matrix）：行表示预测类别，列表示实际类别
+table(Predicted = predicted_class, Actual = test_data$low)
+```

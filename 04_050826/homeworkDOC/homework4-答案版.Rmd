@@ -1,0 +1,528 @@
+# Homework4
+
+```{r eval=TRUE,include=FALSE}
+setwd("E:\\000_desktop\\研四下\\生物医学统计学-2025级\\作业")
+library(dplyr)
+library(tidyverse)
+library(ggrepel)
+library(pheatmap)
+library(ggplot2)
+library(ggsignif)
+```
+
+## Question1
+
+A researcher is analyzing the therapeutic response of a BET inhibitor in diffuse large B-cell lymphoma (DLBCL). There are 10 Drug Sensitive samples(S1-S10) and 10 Drug Resistant samples(R1-R10). The researcher measured the RNA expression levels of 12 candidate genes,  the expression levels are normalized and log2-transformed.
+See data file: “homework4-Q1-data.csv”.
+
++ (1) Establish an automated statistical analysis pipeline. For each gene, perform a Shapiro–Wilk normality test and a homogeneity of variance test, and automatically select an appropriate hypothesis testing method based on the test results (e.g., Student’s t-test, Welch’s t-test, or Wilcoxon rank-sum test).  In the output data frame, report the gene name, the hypothesis testing method used, the differential expression p-value, and the log2 fold change (log2FC), where log2FC = log2(avg of condition B / avg of condition A)
++ (2) What is the formula for the BH-FDR correction? How should this formula be interpreted? Apply the BH-FDR method to perform multiple testing correction on the statistical results obtained in the previous step.
++ (3) For samples involving m independent hypothesis tests, the Bonferroni correction formula is: p.adj = p × m. This is a more stringent correction method. In practical analyses, RNA-seq studies tend to prefer BH-FDR over Bonferroni correction. Please explain the possible reasons for this preference. 
++ (4) In the hypothesis testing workflow, why is it necessary to perform normality tests and homogeneity of variance tests before conducting a t-test? In what ways can outliers in the data affect the results of a t-test?
+
+### Answer
+
+Code for (1) and (2):
+
+```{r warning=FALSE}
+library(tidyverse)
+library(ggrepel)
+library(pheatmap)
+
+## Read data
+expr = read.csv("homework4-Q1-data.csv")
+
+############################
+# 数据准备
+############################
+rownames(expr) <- expr$Gene
+expr2 <- expr[,-1]
+group <- factor(c(rep("Sensitive",10),
+                  rep("Resistant",10)))
+############################
+# 自动统计函数
+############################
+test_gene <- function(x){
+  s <- as.numeric(x[1:10])
+  r <- as.numeric(x[11:20])
+  # 正态性
+  p1 <- shapiro.test(s)$p.value
+  p2 <- shapiro.test(r)$p.value
+  normal <- (p1 > 0.05 & p2 > 0.05)
+  # 方差齐性
+  vp <- var.test(s,r)$p.value
+  equal_var <- vp > 0.05
+  log2FC <- mean(s) - mean(r)
+  if(normal){
+    if(equal_var){
+      tt <- t.test(s,r,var.equal=TRUE)
+      method <- "Student_t"
+    }else{
+      tt <- t.test(s,r,var.equal=FALSE)
+      method <- "Welch_t"
+    }
+    pvalue <- tt$p.value
+  }else{
+    wt <- wilcox.test(s,r)
+    pvalue <- wt$p.value
+    method <- "Wilcoxon"
+  }
+  return(data.frame(
+    Method = method,
+    log2FC = log2FC,
+    Pvalue = pvalue
+  ))
+}
+############################
+# 循环分析
+############################
+res <- map_df(rownames(expr2), function(g){
+  tmp <- test_gene(expr2[g,])
+  tmp$Gene <- g
+  tmp
+})
+############################
+# 多重检验校正
+############################
+res$Bonferroni <- p.adjust(res$Pvalue,
+                           method="bonferroni")
+res$Holm <- p.adjust(res$Pvalue,
+                     method="holm")
+res$FDR <- p.adjust(res$Pvalue,
+                    method="BH")
+############################
+# 排序
+############################
+res <- res %>%
+  select(Gene, everything()) %>%
+  arrange(FDR)
+print(res)
+```
+
+
+**Task (2):** The **Benjamini–Hochberg False Discovery Rate (BH-FDR)** correction formula is:
+
+$$
+p_{(i)} \leq \frac{i}{m} \cdot q
+$$
+
+Where:
+
+- $p_{(i)}$ = the  i-th smallest *uncorrected* p-value among m total tests.
+- $m$ = total number of hypothesis tests.
+- $q$ = desired FDR level (usually 0.05 or 0.10).
+- $i$ = rank of the p-value after sorting ascending.
+
+The procedure is:
+
+1. Sort all raw p-values from smallest to largest: $p_{(1)} \le p_{(2)} \le \dots \le p_{(m)}$.
+2. Find the largest $k$ such that $p_{(k)} \le \frac{k}{m} \cdot q$.
+3. Reject the null hypotheses for $p_{(1)}, \dots, p_{(k)}$.
+
+**Adjusted p-value** for BH-FDR is often computed as:
+
+$$
+p_{\text{adj}(i)} = \min\left( \frac{p_{(i)} \cdot m}{i}, 1 \right)
+$$
+
+then compare $p_{\text{adj}(i)} \leq q$ to decide significance.
+
+**Interpretation:**
+
+The BH-FDR method controls the **expected proportion of false discoveries** among all rejected hypotheses.  
+If $q = 0.05$, then among all genes called “significant,” we expect at most 5% to be false positives. This is less stringent than Bonferroni, which controls the *family-wise error rate (FWER)* — the probability of *any* false positive.
+
+**Task (3):** Why RNA-seq studies prefer BH-FDR over Bonferroni
+
+Reasons for preferring BH-FDR in RNA-seq / genomics:
+
+1. Less conservative: Bonferroni penalizes heavily for many tests (e.g., m = 20000  genes → p must be < $2.5\times 10^{-6}$ for significance). BH-FDR allows more discoveries while still controlling false positives at a reasonable rate.
+
+2. Tolerates some false positives: In exploratory genomics, missing a true signal (Type II error) is often worse than including a few false positives (Type I error). FDR balances this.
+
+3. Greater statistical power: For differentially expressed genes with small but real effect sizes, BH-FDR detects them, while Bonferroni may not.
+
+4. Appropriate for large-scale screening: RNA-seq aims to identify candidate genes for further validation — FDR control matches this goal better than strict FWER control.
+
+**Task (4):** Normality tests, homogeneity of variance, and outliers in t-tests
+
+**Why normality and variance homogeneity tests before t-test?**
+
+- Normality: The classical two-sample t-test assumes the data in each group are approximately normally distributed. If severely violated, the t-test’s type I error rate may be inaccurate (especially for small sample sizes, like n=10 here).
+
+- Homogeneity of variance: The standard (pooled) t-test assumes equal variances between groups. If unequal variances, the test can be anti-conservative or conservative. In such cases, we use Welch’s t-test (does not assume equal variance) without needing homogeneity test.
+
+However, many statisticians argue that normality tests (Shapiro–Wilk, etc.) are often too sensitive with large samples, and with n=10 lack power — a better practice is to use graphical checks (QQ plots) and robust methods anyway.
+
+**How outliers affect t-test results**
+
+1. Inflate variance → reduces t-statistic → lowers power (may miss true differences).
+
+2. Shift mean artificially → t-statistic may become significant when no real biological difference exists (false positive) or non-significant when difference exists (false negative).
+
+3. Violate normality assumption → t-test loses validity, especially for small samples.
+
+4. Affect variance equality: Outliers in one group can cause unequal variance, requiring Welch’s correction.
+
+------
+
+## Question2
+
+A biology research team is investigating whether a new plant growth hormone can promote the growth of rice seedlings.
+The researchers randomly divide the rice seedlings into two groups:
+
++ Experimental group: treated with the new plant growth hormone 
++ Control group: treated with a standard nutrient solution 
+
+After two weeks, the height of the seedlings (cm) is measured. The significance level is set at α=0.05, and the researchers aim to detect a medium effect size (Cohen’s d) of 0.6.
+
+1. If each group contains 35 rice seedlings, what is the statistical power of the study? 
+2. If the researchers want the statistical power to reach 80%, what is the minimum sample size required for each group? 
+3. Due to limited greenhouse space, only 20 rice seedlings can be accommodated in each group. Calculate the minimum detectable effect size for the experiment.
+
+Hint：using pwr.t.test()
+
+### Answer
+
+
+(1) 
+
+```{r}
+#If each group contains 35 rice seedlings: 
+#What is the statistical power of the study?
+library(pwr)
+pwr.t.test(
+  n = 35,
+  d = 0.6,
+  sig.level = 0.05,
+  type = "two.sample",
+  alternative = "two.sided"
+)
+```
+
+power=0.696531
+
+
+(2)
+
+```{r}
+#If the researchers want the study to achieve a statistical power of 80%: 
+#How many rice seedlings are required in each group?
+pwr.t.test(
+  power = 0.8,
+  d = 0.6,
+  sig.level = 0.05,
+  type = "two.sample",
+  alternative = "two.sided"
+)
+```
+
+required 45 each group
+
+(3) 
+
+```{r}
+#Due to limited greenhouse space, the experiment can only accommodate 20 rice seedlings per group. 
+#What is the minimum detectable effect size under the following conditions? 
+#n=20 per group 
+#power = 0.8 
+#α=0.05
+pwr.t.test(
+  n = 20,
+  power = 0.8,
+  sig.level = 0.05,
+  type = "two.sample",
+  alternative = "two.sided"
+)
+```
+
+Cohen’s d = 0.9091587
+
+------
+
+## Question3
+
+A researcher is investigating the susceptibility of four different cell lines—CHO, HEK293T, Vero, and BHK-21—to a recombinant GFP-expressing virus. The infection efficiency is quantified as the percentage of GFP-positive cells observed under fluorescence microscopy 48 hours post-infection. Ten independent replicate ROIs were used for each cell line (see “homework4-Q3-data.csv”).
+
++ (1). Perform a step-by-step one-way ANOVA at the 5% significance level to determine whether there is a significant difference in the mean infection efficiency among the four cell lines.
++ (2). If the ANOVA results are significant, conduct a Tukey’s HSD post-hoc test to identify  which specific cell line differs significantly in their susceptibility to the virus and plot a boxplot of the infection efficiency data. (Hint: Use TukeyHSD() in R) 
+
+### Answer
+
+```{r}
+library(dplyr)
+#read data
+d<-read.csv("homework4-Q3-data.csv")
+#1.1 one way anova step by step
+######normality test########
+shapiro_results <- d %>%
+  group_by(CellLine) %>%
+  summarise(
+    n = n(),
+    W_statistic = round(shapiro.test(GFP_Positive_Percent)$statistic, 4),
+    p_value = round(shapiro.test(GFP_Positive_Percent)$p.value, 4),
+    normal = ifelse(p_value > 0.05, "Yes", "No")
+  )
+print(shapiro_results)
+
+######one way anova step by step########
+##H0: All cell lines have the same mean infection efficiency。 
+##H1： At least one cell line has a different mean
+mean_d<-d %>%
+  group_by(CellLine)%>%
+  summarise(Mean=mean(GFP_Positive_Percent),n=n())
+mean_total<-mean(d$GFP_Positive_Percent)
+## SSB calculation
+mean_d$ssb_contri<-mean_d$n*(mean_d$Mean-mean_total)^2
+SSB<-sum(mean_d$ssb_contri)
+## SSW calculation
+d<-d%>% left_join(mean_d %>% select(CellLine,Mean),by="CellLine")
+d$ssw_contri <- (d$GFP_Positive_Percent - d$Mean)^2
+SSW <- sum(d$ssw_contri)
+## 
+df_between<-nrow(mean_d)-1  #group number -1
+df_within<-nrow(d)-nrow(mean_d) #total-group
+df_total<-nrow(d)-1 # total-1
+MSB <- SSB / df_between
+MSW <- SSW / df_within
+F_value <- MSB / MSW
+p_value <- pf(F_value, df_between, df_within, lower.tail = FALSE)
+print(paste0('F_value=',F_value,',P_value=',p_value))
+#1.2. one way anova R verfication
+d$CellLine<-factor(d$CellLine)
+model <- aov(GFP_Positive_Percent ~ CellLine, data = d)
+summary(model)
+
+# 2. TUKEY TEST
+tukey <- TukeyHSD(model)
+print(tukey)
+
+## Plot
+tukey_df <- as.data.frame(tukey$CellLine)
+comparison <- rownames(tukey_df)
+p_vals <- tukey_df[comparison, "p adj"]
+comp_list <- list(
+  c("CHO", "BHK21"), c("HEK293T", "BHK21"), c("BHK21", "Vero"),
+  c("HEK293T", "CHO"), c("CHO", "Vero"), c("HEK293T", "Vero")
+)
+
+library(ggplot2)
+library(ggsignif)
+ggplot(d, aes(CellLine, GFP_Positive_Percent, fill = CellLine)) +
+  geom_boxplot() +
+  geom_signif(comparisons = comp_list,
+              annotations = paste("p =", round(p_vals, 4)),
+              y_position = c(45, 50, 85, 60, 95, 75)+40) +
+  theme_classic() + theme(legend.position = "none")
+
+```
+
+------
+
+
+## Question4
+
+In a biological experiment investigating the influence of varied housing conditions on mouse body weight, 60 eight-week-old mice with uniform initial weights were randomly allocated into six distinct groups. These groups were maintained for two weeks under specific rearing conditions defined by combinations of:
+Factor A (Housing Temperature): Levels at 4°C (A1), 25°C (A2), and 30°C (A3).
+Factor B (Diet): Levels consisting of a standard/normal diet (B1) and a high-fat diet (B2).
+See data file: “homework4-Q4-data.csv”
+
++ (1) Check if the body weight data meets the assumptions of normality and homogeneity of variance for Factors A (Temperature) and B (Diet).
++ (2) Analyze whether Factor A (Temperature) and Factor B (Diet) have significant effects on body weight, without considering the interaction effect between them.
++ (3) If the interaction effect is considered, re-analyze the above problem and identify which groups show a significant difference in mean body weight compared to the A2B1 group.
+
+### Answer
+
+
+**(1). Check normality and homoscedasticity**
+
+```{r}
+data = read.csv("homework4-Q4-data.csv")
+data$A <- as.factor(data$A)
+data$B <- as.factor(data$B)
+
+nor <- c()# A 正态性
+for (i in unique(data$A)) {
+ subset_values <- data$Weight[data$A == i]
+ if (length(subset_values) >= 3) {
+ result <- shapiro.test(subset_values)
+ print(paste("Group A =", i))
+ print(result)
+ nor <- c(nor, result$p.value)
+ } else {
+ print(paste("Group A =", i, "- too few samples for Shapiro-Wilk test"))
+ nor <- c(nor, NA)
+ }
+} 
+
+
+# B 正态性
+for (i in unique(data$B)) {
+ subset_values <- data$Weight[data$B == i]
+ if (length(subset_values) >= 3) {
+ result <- shapiro.test(subset_values)
+ print(paste("Group B =", i))
+ print(result)
+ nor <- c(nor, result$p.value)
+ } else {
+ print(paste("Group B =", i, "- too few samples for Shapiro-Wilk test"))
+ nor <- c(nor, NA)
+ }
+}
+
+
+# 方差齐性检验
+bar <- c()
+result=bartlett.test(Weight~A,data=data)
+print(result)
+#Bartlett's K-squared = 0.19888, df = 2, p-value = 0.9053
+
+bar <- c(bar,result$p.value)
+result=bartlett.test(Weight~B,data=data)
+print(result)
+## Bartlett's K-squared = 0.20953, df = 1, p-value = 0.6471
+
+bar <- c(bar,result$p.value)
+if (all(nor>0.05)){
+ print("two factors are normal")
+ if(all(bar>0.05)){
+ print("and the data is variance equal")
+ }else{
+ print("but the data is not variance equal")
+ }
+}else{
+ print("the data is not normally distributed")
+}
+
+## [1] "two factors are normal"
+## [1] "and the data is variance equal"
+```
+
+
+**(2). 2-way ANOVA without interactions**
+
+H0: all the means are equal
+
+```{r}
+aov_main <- aov(Weight ~ A + B, data = data)
+summary(aov_main)
+```
+
+
+**(3). 2-way ANOVA interactions**
+
+H0: all the means are equal
+
+```{r}
+aov_interaction <- aov(Weight ~ A * B, data = data)
+summary(aov_interaction)
+
+#multiple comparison
+tukey_result <- TukeyHSD(aov_interaction)
+print(tukey_result)
+
+library(tidyr)
+library(dplyr)
+target_comparisons <- as.data.frame(tukey_result$`A:B`) %>%
+ tibble::rownames_to_column("Comparison") %>%
+ filter(grepl("A2.B1", Comparison)) %>%
+ dplyr::select(Comparison, `p adj`)
+cat("\n Significant groups with A2B1 (p < 0.05) \n")
+
+
+target_comparisons[target_comparisons$`p adj` < 0.05, ]
+```
+
+
+------
+
+## Question5
+
+A pharmacologist wants to compare the effects of three different drug treatments (Drug A, Drug B, Drug C) on weight gain in mice. Because the data do not satisfy the normality assumption and variances are unequal, one-way ANOVA cannot be used. The experiment uses a completely randomized design, with 10 mice fed under each drug treatment. After four weeks, the weight gain (in grams) for each mouse is recorded as follows:
+
++ Drug A: 145, 152, 138, 160, 147, 155, 142, 149, 153, 140
++ Drug B: 136, 129, 142, 131, 140, 135, 138, 133, 145, 130
++ Drug C: 120, 125, 118, 132, 121, 128, 115, 124, 130, 122
+
+Determine whether there is a significant difference in weight gain among the three drug treatments at a significance level of α = 0.05.（use R）
+
+
+
+### Answer
+
+```{r}
+# 输入数据
+drug_A <- c(145, 152, 138, 160, 147, 155, 142, 149, 153, 140)
+drug_B <- c(136, 129, 142, 131, 140, 135, 138, 133, 145, 130)
+drug_C <- c(120, 125, 118, 132, 121, 128, 115, 124, 130, 122)
+
+# 合并为数据框
+weight <- c(drug_A, drug_B, drug_C)
+group <- factor(rep(c("A", "B", "C"), each = 10))
+
+# Kruskal-Wallis检验
+kruskal.test(weight ~ group)
+```
+	
+检验统计量 H=22.73，自由度 df=2，p远小于0.05。
+
+在显著性水平 α=0.05 下，拒绝原假设。
+
+可以认为三种药物处理下小鼠的体重增加量存在统计学显著差异。
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,97 @@
+## 构建多元线性回归模型
+
+题目要求探索车辆的“结构特征”对其燃油效率（每加仑英里数, `mpg`）的影响。基于 `mtcars` 数据集（同时考虑到第 2 小问的要求），这里选取的结构特征是车重（`wt`）和马力（`hp`）。
+
+```{r}
+# 使用 mtcars 数据集，以 mpg 为因变量（响应变量），wt 和 hp 为自变量（预测变量）拟合多元线性回归
+model_multi <- lm(mpg ~ wt + hp, data = mtcars)
+summary(model_multi) 
+```
+
+---
+
+## 提取并打印单个回归系数的 p-value
+
+在 R 中，`summary(model)` 产生的结果本质上是一个列表结构，其中系数矩阵包含了估计值、标准误、t-value 和 p-value。我们可以直接通过索引提取所需的 p-value。
+
+```{r}
+# 提取系数矩阵
+coef_matrix <- coef(summary(model_multi))
+
+# 提取并打印 'wt' 和 'hp' 的 p-value (位于第 4 列 "Pr(>|t|)")
+p_val_wt <- coef_matrix["wt", "Pr(>|t|)"]
+p_val_hp <- coef_matrix["hp", "Pr(>|t|)"]
+
+cat("系数 'wt'（车重）的 t 检验 p-value:", format(p_val_wt, scientific = TRUE), "\n")
+cat("系数 'hp'（马力）的 t 检验 p-value:", format(p_val_hp, scientific = TRUE), "\n")
+```
+
+---
+
+## 动态计算并打印整体模型的显著性 p-value
+
+`lm()` 模型的 `summary()` 对象中存储了 F 统计量及其对应的两个自由度，但没有直接存储计算好的整体 p 值。我们需要提取这些参数，然后使用 `pf()` 函数（F 分布的累积概率函数）动态计算。
+
+```{r}
+# 提取 F 统计量及其对应的自由度
+f_stats <- summary(model_multi)$fstatistic
+
+# 提取具体数值
+f_value <- f_stats[1] # F 统计量的值
+df_num <- f_stats[2] # 分子自由度（模型自由度）
+df_den <- f_stats[3] # 分母自由度（残差自由度）
+
+# 计算整体模型的 p-value（右尾概率）
+overall_p_value <- pf(f_value, df_num, df_den,
+                      lower.tail = FALSE) # lower.tail = FALSE 表示计算右尾概率，即 P(F > f_value)
+
+cat("整体回归模型的 F 检验 p-value:", format(overall_p_value, scientific = TRUE), "\n")
+```
+
+---
+
+## 统计结果分析与共线性探讨
+
+上述结果表明：
+
+- **整体模型极显著**：F 检验的 `overall_p_value` 极小（`r format(overall_p_value, scientific = TRUE)`），说明 `wt` 和 `hp` 作为整体，对 `mpg` 有非常强的预测能力。
+- **单个系数极显著**：在这个特定模型中，`wt` 和 `hp` 的 t 检验 p 值也极小（`r format(p_val_wt, scientific = TRUE)` 和 `r format(p_val_hp, scientific = TRUE)`）。
+
+**为何一个变量可能在联合模型中变得不显著（Statistical Paradox）？**
+这可能涉及**多重共线性**。
+当自变量之间高度相关时，它们共享了大量的预测信息。虽然整体模型显著，但在控制了其他变量的影响后，某个特定变量可能无法再提供额外的独立预测信息，从而导致其 t 检验 p 值上升，变得不显著。
+这并不意味着该变量对响应变量没有影响，而是说在给定其他变量的前提下，它的独特贡献不足以达到统计显著性。
+
+假设再往模型里加入一个特征，比如“气缸数量（`cyl`）”：`lm(mpg ~ wt + hp + cyl)`。
+
+```{r}
+# 加入 cyl 变量后重新拟合模型
+model_with_cyl <- lm(mpg ~ wt + hp + cyl, data = mtcars)
+summary(model_with_cyl)
+
+# 提取系数矩阵
+coef_matrix_cyl <- coef(summary(model_with_cyl))
+
+# 提取并打印 'wt'、'hp' 和 'cyl' 的 p-value
+p_val_wt_cyl <- coef_matrix_cyl["wt", "Pr(>|t|)"]
+p_val_hp_cyl <- coef_matrix_cyl["hp", "Pr(>|t|)"]
+p_val_cyl <- coef_matrix_cyl["cyl", "Pr(>|t|)"]
+
+cat("加入 cyl 后，系数 'wt' 的 t 检验 p-value:", format(p_val_wt_cyl, scientific = TRUE), "\n")
+cat("加入 cyl 后，系数 'hp' 的 t 检验 p-value:", format(p_val_hp_cyl, scientific = TRUE), "\n")
+cat("加入 cyl 后，系数 'cyl' 的 t 检验 p-value:", format(p_val_cyl, scientific = TRUE), "\n")
+```
+
+结果表明，加入 `cyl` 后，`hp` 的 p-value 变得不显著（`r format(p_val_hp_cyl, scientific = TRUE)`），同时 `cyl` 的 p-value 也不显著（`r format(p_val_cyl, scientific = TRUE)`）。这就是多重共线性的典型表现：`wt`、`hp` 和 `cyl` 之间存在高度相关性，导致它们在联合模型中相互“抢占”预测信息，使得单个变量的独立贡献难以显现。
+
+这种现象的底层原理是：
+
+1. **共享方差**：大马力（`hp`）的车通常更重（`wt`）并且拥有更多的气缸（`cyl`）。这些自变量之间本身高度相关。
+2. **t 检验的苛刻性**：多元回归中，系数的 t 检验评估的是：**在其他所有变量都已经发挥作用（即“被控制”）之后**，这个变量还能提供多少“独一无二”的预测信息？
+3. **信号稀释**：当多个变量共享了大部分的预测信息时，每个变量的独特贡献就被稀释了，导致它们的 t 检验 p 值上升，变得不显著。
+
+**总结**：
+
+- 整体模型显著并不保证每个单独的变量都显著。
+- 多重共线性是导致单个变量在联合模型中变得不显著的主要原因之一。
+- 在实际分析中，除了关注整体模型的显著性外，也要检查自变量之间的相关性，必要时可以使用方差膨胀因子（variance inflation factor, VIF）等工具来诊断和处理共线性问题。

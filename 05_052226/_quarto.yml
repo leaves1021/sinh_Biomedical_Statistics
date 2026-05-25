@@ -1,0 +1,23 @@
+# 项目设置
+project:
+  type: default # 项目类型，默认为 default，可以根据需要选择其他类型，如 website、book 等
+  output-dir: _output # 输出目录，默认为 _output，可以根据需要修改
+  execute-dir: project # 把代码执行时的工作目录固定为项目根目录，而不是当前 .qmd 文件所在目录。
+  render:
+    - src/hw05_main.qmd # 指定要渲染的 .qmd 文件，可以根据需要修改
+
+# 输出格式设置
+format:
+  html:
+    toc: true # 显示目录
+    theme: cyborg # 主题
+    number-sections: true # 显示章节编号
+    code-fold: true # 启用代码折叠功能，默认折叠代码块
+    code-tools: true # 显示代码块工具栏，包含复制、下载等功能
+    embed-resources: true # 将资源嵌入到 HTML 文件中，生成一个独立的文件（而不生成资源文件夹）
+
+# 执行设置
+execute:
+  echo: true # 显示代码块内容
+  warning: false # 不显示警告信息
+  message: false # 不显示消息信息
