@@ -1,0 +1,110 @@
+**数据准备与预处理**：
+在 ANOVA 中，确保分组变量被 R 识别为 factor。
+
+```{r}
+# 读取数据
+data <- read.csv("data/raw/homework6-Q2.csv",
+                 stringsAsFactors = TRUE)
+
+# 确保 drug 和 time 属于分类因子
+data$drug <- as.factor(data$drug)
+data$time <- as.factor(data$time)
+
+# 简单查看数据结构
+str(data)
+```
+
+---
+
+## 单因素方差分析（One-way ANOVA）
+
+在此步骤中，暂不考虑治疗时间，仅评估不同药物处理组（整体均值）之间是否存在显著差异。
+
+```{r}
+# 1. 拟合单因素方差分析模型
+model_1way <- aov(viability ~ drug, data = data)
+
+# 打印 ANOVA 摘要
+cat("--- One-way ANOVA 结果 ---\n")
+summary(model_1way)
+
+# 2. 如果显著，进行 Tukey's HSD 事后多重比较
+# 根据 summary()，如果 Pr(>F) < 0.05，则执行以下步骤
+if (summary(model_1way)[[1]][["Pr(>F)"]][1] < 0.05) {
+  tukey_res <- TukeyHSD(model_1way)
+  cat("\n--- Tukey HSD 事后检验结果 ---\n")
+  print(tukey_res)
+
+  # 简单可视化（可选）
+  plot(tukey_res, las = 1, col = "red")
+}
+```
+
+**结论**：
+
+- **整体检验**：`drug` 组间的 p-value 为 `r summary(model_1way)[[1]][["Pr(>F)"]][1]`，小于 0.01，说明不同药物对细胞活力的影响存在极其显著的统计学差异。
+- **事后检验**：通过对比 `p adj` 列可以发现，与 Control 相比，Drug A、Drug B、Drug C 均显著降低了细胞活力（$p < 0.05$），表明三种药物均具有抗肿瘤增殖活性。此外，Drug B 的抑制效果最强，与 Drug A 和 Drug C 之间的差异也达到了统计学显著水平（$p < 0.05$）。
+
+---
+
+## 双因素方差分析（Two-way ANOVA）
+
+### 执行 two-way ANOVA
+
+现在同时引入 `drug` 和 `time`，构建包含交互作用项的双因素模型，因为药物的起效程度往往依赖于作用时间。
+
+```{r}
+# 拟合包含交互作用的双因素方差分析模型
+model_2way <- aov(viability ~ drug * time, data = data)
+
+# 打印 ANOVA 摘要
+cat("--- Two-way ANOVA 结果 ---\n")
+summary(model_2way)
+```
+
+**结论**：
+
+- `drug` 主效应极显著 ($p < 0.01$)。
+- `drug:time` 交互效应极显著 ($p < 0.01$)。
+- `time` 主效应不显著 ($p > 0.05$)。
+
+这表明药物的抑制效果不仅取决于药物类型，还受到治疗时间的显著影响，存在明显的时间依赖性。时间主效应不显著可能是因为不同药物在不同时间点的效应方向相反（如对照组在 48h 增殖，而 Drug B 在 48h 抑制），导致整体时间效应被抵消。
+
+### 执行基于 BH 校正的配对 t 检验
+
+使用 `interaction(drug, time)` 将两个因子融合成 $4 \times 2 = 8$ 个独立的分组，然后进行两两对比，并使用 Benjamini-Hochberg（BH）方法控制假阳性。
+
+```{r}
+# 使用 pairwise.t.test 进行多重比较
+# interaction() 将生成类似 "Control.24h", "DrugA.48h" 的组合标签
+posthoc_interaction <- pairwise.t.test(
+  x = data$viability, 
+  g = interaction(data$drug, data$time), 
+  p.adjust.method = "BH"
+)
+
+cat("\n--- 所有 Drug-Time 组合的 Pairwise t-test (BH 校正) ---\n")
+print(posthoc_interaction)
+```
+
+### 数据可视化验证（可选）
+
+绘制带有误差线的柱状图或交互作用图，能够最直观地展示为什么需要分析它们的组合效应。
+
+```{r}
+# 绘制交互作用折线图
+interaction.plot(
+  x.factor = data$time, 
+  trace.factor = data$drug, 
+  response = data$viability,
+  type = "b", pch = 19, col = c("black", "red", "blue", "green"),
+  xlab = "Treatment Time", ylab = "Mean Cell Viability (%)",
+  trace.label = "Drug Type",
+  main = "Interaction Plot: Drug vs Treatment Time"
+)
+```
+
+### 简要总结
+
+1. **抗肿瘤效力**：所有三种药物均有效，但 Drug B 在长时程（48h）的抑制效果最为显著。
+2. **时间依赖性**：由于药物与时间的交互作用显著，药效并非线性累加。例如，Drug B 表现出强烈的“时间依赖性毒性”，其在 48h 的细胞存活率显著低于 24h ($p < 0.05$)；而对照组在 48h 的增殖反而显著高于 24h。基于 BH 校正的多重比较进一步揭示了这些组内的动态变化。

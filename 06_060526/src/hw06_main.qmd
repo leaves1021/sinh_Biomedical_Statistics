@@ -1,0 +1,24 @@
+---
+title: "Biomedical Statistics Homework 06"
+author: "Zipeng YE (CEBSIT, CAS)"
+---
+
+# Question 1
+
+{{< include q1.qmd >}}
+
+# Question 2
+
+{{< include q2.qmd >}}
+
+# Question 3
+
+{{< include q3.qmd >}}
+
+# Question 4
+
+{{< include q4.qmd >}}
+
+# Question 5
+
+{{< include q5.qmd >}}

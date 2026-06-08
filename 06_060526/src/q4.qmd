@@ -1,0 +1,111 @@
+## 主成分分析（PCA）与方差解释率
+
+```{r}
+# 1. 加载数据
+data("USArrests")
+
+# 2. 执行 PCA (必须标准化数据: scale. = TRUE)
+pca_res <- prcomp(USArrests, scale. = TRUE)
+
+# 3. 计算方差解释率
+# 标准差的平方即为方差（特征值）
+var_explained <- pca_res$sdev^2 / sum(pca_res$sdev^2)
+cum_var_explained <- cumsum(var_explained) # "cumsum" 表示累积和
+
+# 输出解释率
+cat("各主成分方差解释率 (Proportion of Variance):\n")
+print(round(var_explained, 4))
+cat("累积方差解释率 (Cumulative Variance):\n")
+print(round(cum_var_explained, 4))
+```
+
+**结论**：从 PC3 开始，累积方差解释率已经超过 90%，说明前两个主成分（PC1 和 PC2）已经捕捉了数据中绝大部分的变异信息，因此我们可以在后续分析中仅使用这两个维度来进行可视化和聚类。
+
+---
+
+## PCA Biplot 可视化与成分解释
+
+```{r}
+# 绘制 Biplot
+biplot(pca_res, scale = 0, cex = 0.6,
+       main = "PCA Biplot of USArrests",
+       col = c("grey40", "red"))
+```
+
+**图像解析与物理意义：**
+
+1. **变量相关性（箭头的方向）**：
+`Murder`（谋杀）、`Assault`（袭击）和 `Rape`（强奸）这三个箭头的方向非常接近，这表明这三种暴力犯罪指标在各州之间具有**强烈的正相关性**。
+
+2. **PC 平面的贡献度（箭头的长度）**：
+`Murder`（谋杀）、`Assault`（袭击）、`Rape`（强奸）和 `UrbanPop`（城市人口比例）四个变量的箭头长度都比较长，说明它们在 PC1-PC2 平面上都有很强的贡献。
+
+3. **主成分的物理意义解释**：
+- **PC1**：三个暴力犯罪指标（`Murder`, `Assault`, `Rape`）在横轴上的投影（Loading）都非常大且为同一方向。因此，PC1 可以被解释为“总体严重暴力犯罪指数”。
+- **PC2**：`UrbanPop`（城市人口比例）的箭头几乎垂直指向 PC2 的轴线，且与其他犯罪指标近乎正交（独立）。因此，PC2 可以被解释为“城市化程度”。
+
+---
+
+## K-means 聚类（基于 PC1 和 PC2）
+
+在真实的生信分析中，我们通常会在降维后的主成分空间（而非原始高维空间）进行聚类，以达到去噪的目的。
+
+```{r}
+# 1. 提取 PC1 和 PC2 的得分
+pca_scores <- as.data.frame(pca_res$x[, 1:2])
+
+# 2. 执行 K-means 聚类（设置 K=3）
+# 设置随机种子保证聚类结果可重复
+set.seed(42)
+kmeans_res <- kmeans(pca_scores, centers = 3, nstart = 25)
+
+# 将聚类结果合并回数据框
+pca_scores$Cluster <- as.factor(kmeans_res$cluster)
+
+# 3. 输出每个州的聚类归属
+cat("States Cluster Assignment:\n")
+print(kmeans_res$cluster)
+```
+
+**聚类特征简述**：
+
+- **Cluster 1（低犯罪率组）**：聚集在 PC1 暴力犯罪极端反方向的州，特征为社会治安良好。
+- **Cluster 2（中犯罪率组）**：位于 PC1 中部，特征为犯罪率中等。
+- **Cluster 3（高犯罪率组）**：聚集在 PC1 暴力犯罪极端方向的州，特征为总体治安恶劣。
+
+---
+
+## 降维空间中的聚类可视化与工作流评价
+
+```{r}
+# 加载 ggplot2 进行高级可视化
+library(ggplot2)
+
+# 绘制 PCA 散点图并根据 K-means 聚类结果着色
+ggplot(
+  pca_scores,
+  aes(x = PC1, y = PC2, color = Cluster, label = rownames(pca_scores))
+) +
+  geom_point(size = 3, alpha = 0.8) +
+  geom_text(vjust = -1, size = 3, check_overlap = TRUE) +
+  scale_color_brewer(palette = "Set1") +
+  theme_minimal() +
+  labs(title = "K-means Clustering (K=3) in PC1-PC2 Space",
+       x = "PC1: Overall violent crime",
+       y = "PC2: Urbanization") +
+  theme(legend.position = "bottom")
+```
+
+**图像评价**：
+在 PC1-PC2 平面中，这 3 个 clusters 呈现出清晰的分离、几乎没有重叠。这是因为 K-means 算法倾向于寻找空间中紧凑的凸形球体，而我们在用于聚类的正是用来画图的这两个维度。
+
+**“PCA 降维 + K-means 聚类”工作流评价**：
+
+1. **优势**：
+   - **去噪**：PCA 过滤掉了原始数据中方差较小的“长尾”噪音，使得 K-means 能够在最反映本质差异的特征空间中进行更稳健的距离计算。
+   - **可视化**：将高维数据压缩至二维或三维，人类可以直观地通过肉眼验证聚类算法是否切分合理。
+   - **计算效率**：在超高维数据（如上万个基因的 RNA-seq）中，先降维能极大加速聚类计算，突破维度灾难。
+
+2. **局限性**：
+   - **线性限制**：PCA 只能捕捉线性相关。如果数据流形是复杂的非线性结构，PCA 降维后会强行破坏局部结构，导致 K-means 分错类。此时需要 UMAP/t-SNE 进行非线性降维。
+   - **信息丢失**：只保留前几个 PC 必然会丢失部分信息。如果某些关键生物学差异隐藏在 PC3 或 PC4 中，这种降维聚类会彻底掩盖真相。

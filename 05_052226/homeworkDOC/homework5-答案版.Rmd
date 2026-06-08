@@ -1,0 +1,440 @@
+---
+title: "homework5-answer"
+author: "张皖豫"
+date: "2026/5/22"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE)
+setwd("E:\\000_desktop\\研四下\\生物医学统计学-2025级\\作业")
+```
+
+
+## Question 1
+
+In bulk RNA-sequencing (Bulk RNA-seq), the expression levels of housekeeping genes generally exhibit a stable positive correlation trend. Based on the provided expression matrix consisting of 12 liver tissue samples and 1,000 genes, we aim to validate this hypothesis using two core housekeeping genes: GAPDH and ACTB.
+
+(1) Read the "homework5-Q1.tsv" file and extract the 12 sets of expression values for GAPDH and ACTB;
+Calculate the Pearson correlation coefficient and Spearman rank correlation coefficient step-by-step using the R programming language (without directly using the cor() function).
+
+(2) Combining the statistical principles of the two correlation coefficients and the characteristics of the experimental data in this study, explain why there are significant differences between the calculated results of the Pearson and Spearman correlation coefficients.
+
+
+### Answer：
+
+**(1) Our code:**
+
+```{r}
+data <- read.delim("homework5-Q1.tsv", sep = "\t", stringsAsFactors = FALSE)
+
+target_genes <- data[data$GeneID %in% c("GAPDH", "ACTB"), ]
+x <- as.numeric(target_genes[target_genes$GeneID == "GAPDH", -1])
+y <- as.numeric(target_genes[target_genes$GeneID == "ACTB", -1])
+n <- length(x) 
+x_mean <- mean(x)
+y_mean <- mean(y)
+cov_sum <- sum((x - x_mean) * (y - y_mean))  
+x_ss <- sum((x - x_mean)^2)                 
+y_ss <- sum((y - y_mean)^2)                 
+pearson_val <- cov_sum / sqrt(x_ss * y_ss)
+rank_x <- rank(x)
+rank_y <- rank(y)
+d_sum <- sum((rank_x - rank_y)^2)
+spearman_val <- 1 - (6 * d_sum) / (n * (n^2 - 1))
+cat("Pearson  =", round(pearson_val, 3), "\n")
+cat("Spearman  =", round(spearman_val, 3), "\n")
+```
+
+
+Pearson (cor函数) = 0.837 
+Spearman (cor函数) = 0.876
+
+**(2) Explanation:**
+
+Pearson correlation coefficient (r) measures the strength and direction of a linear relationship between two continuous variables. It assumes:
+
++ The data are approximately normally distributed.
++ The relationship between variables is linear.
++ Homoscedasticity (constant variance across the range of values).
++ High sensitivity to outliers — a single extreme value can dramatically change the coefficient.
+
+Spearman rank correlation coefficient (ρ) measures the strength and direction of a monotonic relationship (whether as one variable increases, the other tends to increase or decrease, but not necessarily at a constant rate). It:
+
++ Converts raw data into ranks.
++ Does not assume normality or linearity.
++ Is robust to outliers because outliers become extreme ranks but have limited influence.
++ Only requires a consistent increasing or decreasing trend, regardless of shape.
+
+Here, Spearman (0.876) > Pearson (0.837). A higher Spearman than Pearson indicates that:
+
++ The relationship between GAPDH and ACTB is not perfectly linear — it is monotonic but with some curvature or irregular spacing.
++ Outliers or influential points likely exist in the expression data. These outliers pull the Pearson correlation downward because Pearson is sensitive to deviations from linearity and extreme values. Spearman, being rank-based, down-weights their influence.
+
+Specifically, possible scenarios:
+
++ At low expression levels, the ratio between GAPDH and ACTB might differ from that at high expression levels (e.g., multiplicative vs additive noise).
++ One or two samples may have unusually high or low expression for one gene but not the other, creating a "leverage point" that distorts the linear fit but does not severely affect rank order.
++ The relationship might be slightly curved (e.g., logarithmic or exponential), where Pearson underestimates association because it forces a straight line, while Spearman correctly captures the consistent upward trend.
+
+--------
+
+## Question 2
+
+A clinical study measured age (years) and systolic blood pressure (SBP, mmHg) in 25 healthy adults. Use the following R code to create the dataset:
+
+```r
+age <- c(30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 32, 37, 42, 47, 52, 57, 62, 67, 72, 77, 33, 43, 53, 63, 73)
+sbp <- c(115, 122, 128, 132, 140, 148, 155, 160, 168, 175, 118, 124, 130, 135, 142, 150, 157, 162, 170, 178, 120, 131, 140, 151, 161)
+bp <- data.frame(age, sbp)
+```
+
++ (a) Fit a simple linear regression model with sbp as the response and age as the predictor. 
++ (b) Test the significance of the regression coefficient for age at the 5% level. State the null and alternative hypotheses, the test statistic, the p-value, and your conclusion in context.
++ (c) Compute and interpret a 95% confidence interval for the slope coefficient.、
+
+### Answer
+
+(a)
+
+```{r}
+# Load data
+age <- c(30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 32, 37, 42, 47, 52, 57, 62, 67, 72, 77, 33, 43, 53, 63, 73)
+sbp <- c(115, 122, 128, 132, 140, 148, 155, 160, 168, 175, 118, 124, 130, 135, 142, 150, 157, 162, 170, 178, 120, 131, 140, 151, 161)
+bp <- data.frame(age, sbp)
+# Fit the simple linear regression model
+model <- lm(sbp ~ age, data = bp)
+summary(model)
+```
+
+(b) Significance test for the slope
+
++ Null hypothesis: $H_0$: $β_1$=0 (age has no linear effect on SBP).
++ Alternative hypothesis: $H_a$: $β_1$≠0 (age has a linear effect on SBP).
+
+Test statistic: t=33.52 (from the age row in summary).
+
+p-value: < $2\times 10^{-16}$ (much smaller than 0.05).
+
+Conclusion: Reject $H_0$ . There is strong evidence that age is a statistically significant predictor of systolic blood pressure.
+
+(c) 
+
+```{r}
+confint(model, "age", level = 0.95)
+```
+
+
+Interpretation:
+
+We are 95% confident that, for each one-year increase in age, the true mean systolic blood pressure increases between 1.17 mmHg and 1.53 mmHg.
+
+------
+
+## Question 3
+
+Using the built-in R dataset 'mtcars', you are required to build a multiple linear regression model. The target is to explore how a vehicle's structural characteristics affect its fuel efficiency.
+
++ 1. Write the R code to construct the multiple linear regression model described above.
++ 2. Write R commands to extract and print the individual p-values for the regression coefficients of 'wt' and 'hp' (from the t-tests).
++ 3. Write R commands to dynamically compute and print the overall model significance p-value (from the F-test).
++ 4. Based on the statistical outputs, analyze the results: Compare the overall model significance with the individual coefficient significances. Explain any potential statistical paradox or phenomenon observed (e.g., why a variable might become insignificant in a joint model).
+
+
+### Answer:
+
+(1)
+
+```{r}
+# task1: Fit the multiple linear regression model
+model <- lm(mpg ~ wt + hp, data = mtcars)
+model_summary <- summary(model)
+model_summary
+```
+
+(2)
+
+```{r}
+# task2: Extract individual coefficient p-values (t-test)
+coef_p_values <- model_summary$coefficients[, 4]
+cat("--- Individual Coefficient P-values ---\n")
+print(coef_p_values[c("wt", "hp")])
+```
+
+(3)
+
+```{r}
+# task3: Compute overall model significance p-value (F-test)
+f_stats <- model_summary$fstatistic
+overall_model_p <- pf(f_stats[1], f_stats[2], f_stats[3], lower.tail = FALSE)
+cat("\n--- Overall Model F-test P-value ---\n")
+print(overall_model_p)
+```
+
+(4)
+
+Overall Model Significance (F-Test):
+
+The overall model p-value is 9.11e-12 (far below 0.05). This strongly indicates that the predictors "wt" and "hp" jointly possess a highly significant linear relationship with mpg. The model as a whole is highly effective and valid.
+
+Individual Coefficient Significances (t-Test):
+
++ Weight (wt): The p-value is 1.12e-06 (< 0.05), proving it has a robust, independent effect on fuel efficiency, even when controlling for horsepower.
++ Horsepower (hp): The p-value is 0.00145 (< 0.05), indicating that it also contributes uniquely and significantly to the model's predictive power, even when vehicle weight is already accounted for.
+
+Conclusion (Alignment of F-test and t-tests):
+
+In this specific model, the results of the global F-test and the individual t-tests align perfectly. Unlike scenarios suffering from severe multicollinearity (where an overall model is significant but individual predictors are not), both wt and hp maintain enough unique explanatory variance. This demonstrates that both variables are independently valuable, and neither is statistically redundant in predicting mpg.
+
+
+------
+
+## Question 4
+
+Facemire et al. examined changes in the ratio of blood-level estriadol to blood level testosterone (each in pg/ml) in male panthers with age(in years). The data are as follows:
+
+
+```r
+Age <- c(1,2,3,4,5,6,7,8)
+Hormone_Ratio <- c(0.42, 0.39, 0.53, 0.65, 0.75, 0.56, 0.53, 0.48)
+```
+
+(1) Generate a scatter plot with "ln(hormone ratio)" on the y-axis and age on the x-axis. Does the relationship between the two variables appear to be linear or non-linear?
+(2) Fit the following straight-line regression model: "log(hormone ratio)~age"
+Plot the line on your scatter plot. Does your linear model in age significantly predict hormone ratios at = 0.05?
+(3) Add "age^2" to the model in part 2. Plot the least squares quadratic curve on your scatter plot. Does adding "age^2" to your model significantly improve prediction of hormone levels?   Hint: Use ANOVA
+
+### Answer
+
+```{r cars}
+# 输入数据
+Age <- 1:8
+Hormone_Ratio <- c(0.42, 0.39, 0.53, 0.65, 0.75, 0.56, 0.53, 0.48)
+
+# 第 (1) 题：绘制散点图
+ln_Hormone_Ratio <- log(Hormone_Ratio)
+plot(Age, ln_Hormone_Ratio, xlab = "Age (yrs)", ylab = "ln(Hormone Ratio)", main = "Scatter Plot of ln(Hormone Ratio) vs Age")
+
+
+## 第 (2) 题：拟合线性回归模型
+# 原假设 H0 ：β1等于0 （年龄不能显著预测激素比值）
+# 备择假设 H1 ：β1不等于0 （年龄不能显著预测激素比值）
+
+
+model_linear <- lm(ln_Hormone_Ratio ~ Age)
+abline(model_linear, col = "red")  # 在散点图上绘制回归直线
+
+# 查看模型的详细信息
+summary(model_linear)
+
+# 提取模型的 R² 和调整后的 R²
+r_squared_linear <- summary(model_linear)$r.squared
+adj_r_squared_linear <- summary(model_linear)$adj.r.squared
+cat("线性模型的 R² 为：", r_squared_linear, "\n")
+cat("线性模型的调整后的 R² 为：", adj_r_squared_linear, "\n")
+
+# 提取模型的 F 检验的 p 值
+f_test_p_value_linear <- summary(model_linear)$fstatistic[1]
+cat("线性模型的 F 检验的 p 值为：", f_test_p_value_linear, "\n")
+
+# 判断线性模型是否在统计上显著（α=0.05）
+if (f_test_p_value_linear < 0.05) {
+  cat("线性模型在统计上显著（p < 0.05）\n")
+} else {
+  cat("线性模型在统计上不显著（p ≥ 0.05）\n")
+}
+```
+从数据趋势看，ln(激素比值) 随年龄先上升（1→5岁，从 -0.868 升至 -0.288），后下降（5→8岁，降至 -0.734），呈现 倒U型（抛物线）趋势。
+答：两个变量之间的关系是 非线性的。
+
+
+p 值 = 0.357 > α  = 0.05，不拒绝原假设 H0
+线性模型在年龄上不能显著预测激素比值（F = 0.993, p = 0.357 > 0.05）线性模型拟合效果很差。
+
+
+```{r}
+# 第 (3) 题：添加 age^2 到模型中
+Age_squared <- Age^2
+model_quadratic <- lm(ln_Hormone_Ratio ~ Age + Age_squared)
+
+# 在散点图上绘制二次曲线
+plot(Age, ln_Hormone_Ratio, xlab = "Age (yrs)", ylab = "ln(Hormone Ratio)", main = "Scatter Plot with Quadratic Curve")
+age_seq <- seq(1, 8, length.out = 100)
+quadratic_pred <- predict(model_quadratic, newdata = data.frame(Age = age_seq, Age_squared = age_seq^2))
+lines(age_seq, quadratic_pred, col = "blue")
+
+# 查看模型的详细信息
+summary(model_quadratic)
+
+# 提取模型的 R² 和调整后的 R²
+r_squared_quadratic <- summary(model_quadratic)$r.squared
+adj_r_squared_quadratic <- summary(model_quadratic)$adj.r.squared
+cat("二次模型的 R² 为：", r_squared_quadratic, "\n")
+cat("二次模型的调整后的 R² 为：", adj_r_squared_quadratic, "\n")
+
+# 使用 ANOVA 比较两个模型
+anova_result <- anova(model_linear, model_quadratic)
+print(anova_result)
+
+# 判断添加 age² 是否显著改进模型
+if (anova_result$`Pr(>F)`[2] < 0.05) {
+  cat("添加 age² 显著改进了模型的预测能力（p < 0.05）\n")
+} else {
+  cat("添加 age² 没有显著改进模型的预测能力（p ≥ 0.05）\n")
+}
+```
+加入 age² 显著改善了模型的预测能力（ANOVA: F = 9.769, p = 0.026 < 0.05）。该抛物线关系表明，雄性黑豹的雌二醇/睾酮比值在约 5岁时达到峰值，呈现先升后降的趋势。
+
+
+-------
+
+
+
+## Question 5
+
+In this question, we will investigate the risk factors associated with low infant birth weight. We will use the birthwt dataset from the MASS package. The outcome of interest is "low" (an indicator of whether the birth weight was less than 2.5 kg).
+
+Please load the dataset using "library(MASS); data(birthwt)". Note that some categorical variables in this dataset are coded as integers. You must convert variables "race", "smoke", and "ht" to factors before fitting the model.
+
+- (a) Fit a multiple logistic regression model predicting "low" using "age", "lwt" (mother's weight at last menstrual period), "race", "smoke", and "ht" as predictors. Display the summary of the model.
+
+- (b) Then try to reduce the number of features from the model in (a) by keeping all the significant features and make another regression model. (Use 0.05 as significant level)
+
+- (c) Use proper test to test the difference between these two models. (Use 0.05 as significant level). Hint: use "anova()"
+
+- (d) You can randomly sample 100 rows as training data to make a regression model using all variables mentioned in (a), and then take remaining 89 rows as prediction data to calculate the accuracy of your model. The predict function return a value between 0 and 1, < 0.5 belong to the normal weight, >= 0.5 belong to the low weight. (Use "set.seed(320)" to explicitly define random seed)
+
+
+```{r}
+library(MASS)
+data(birthwt)
+
+##==========
+## task (a)
+##==========
+
+# Convert categorical variables to factors
+birthwt$race  <- as.factor(birthwt$race)
+birthwt$smoke <- as.factor(birthwt$smoke)
+birthwt$ht    <- as.factor(birthwt$ht)
+
+# Fit multiple logistic regression model
+model_a <- glm(low ~ age + lwt + race + smoke + ht, 
+               data = birthwt, 
+               family = binomial)
+
+# Display summary
+summary(model_a)
+```
+
+
+```{r}
+##==========
+## task (b)
+##==========
+
+# Reduce features by keeping significant features (p < 0.05)
+# Extract p-values from model_a
+p_values <- summary(model_a)$coefficients[, 4]
+
+# Identify significant predictors (p < 0.05, excluding intercept)
+significant_predictors <- names(p_values[p_values < 0.05 & names(p_values) != "(Intercept)"])
+cat(significant_predictors) # the siginificant variables are "wt race2 race3 smoke1 ht1"
+# Fit reduced model
+model_b <- glm(low~lwt+race+smoke+ht, data = birthwt, family = binomial)
+# Display summary of reduced model
+summary(model_b)
+
+```
+
+
+
+```{r}
+##==========
+## task(c)
+##==========
+
+aov <- anova(model_a, model_b, test="Chisq")
+aov
+summary(aov)
+# Pr(>Chi)=0.5431>0.05, so we accept H0 that there is no significant difference between two model.
+```
+
+
+
+
+
+```{r}
+##==========
+## task(d)
+##==========
+
+# (d) Randomly sample 100 rows as training data, remaining 89 as prediction data
+# Set random seed for reproducibility
+set.seed(320)  # Explicitly define random seed
+
+# Get total number of rows
+n_total <- nrow(birthwt)  # Should be 189
+
+# Randomly sample 100 row indices for training
+train_indices <- sample(1:n_total, size = 100, replace = FALSE)
+
+# Create training and test datasets
+train_data <- birthwt[train_indices, ]
+test_data <- birthwt[-train_indices, ]  
+
+# Fit model using all variables
+model_d <- glm(low ~ age + lwt + race + smoke + ht, 
+               data = train_data, 
+               family = binomial)
+
+# Make predictions on test data
+predictions <- predict(model_d, newdata = test_data, type = "response")
+
+# Convert probabilities to binary predictions (0 = normal weight, 1 = low weight)
+predicted_classes <- ifelse(predictions < 0.5, 0, 1)
+
+# Actual classes from test data
+actual_classes <- test_data$low
+
+# Calculate accuracy
+accuracy <- mean(predicted_classes == actual_classes)
+cat("\nModel Accuracy:", accuracy * 100, "%\n")
+```
+
+And there are some extension:
+
+```{r}
+###----------------------------
+### OPTIONAL CODE
+###----------------------------
+
+# Optional: Create confusion matrix
+confusion_matrix <- table(Predicted = predicted_classes, Actual = actual_classes)
+print("Confusion Matrix:")
+print(confusion_matrix)
+
+# Optional: Calculate additional metrics
+correct_predictions <- sum(predicted_classes == actual_classes)
+total_predictions <- length(actual_classes)
+cat("\nCorrect predictions:", correct_predictions, "out of", total_predictions, "\n")
+
+# Optional: Draw ROC curve
+library(pROC)
+data1 = test_data
+data1$pred.p = predictions
+auc <- roc(data1$low, data1$pred.p)
+auc$auc
+plot(auc)
+```
+
+
+
+
+
+
+
+
+
+

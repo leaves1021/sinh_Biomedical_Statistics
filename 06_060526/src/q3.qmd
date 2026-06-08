@@ -1,0 +1,101 @@
+## 散点图矩阵与完整多元线性回归
+
+### 数据可视化与模型拟合
+
+探索多个连续变量之间的关系时，散点图矩阵能够直观展示变量间的共线性和初步的线性相关趋势。随后，使用普通最小二乘法拟合多元线性回归。
+
+```{r}
+# 加载必要的 R 包
+library(glue) # 用于字符串格式化输出
+
+# 1. 加载数据集
+data(swiss)
+
+# 2. 绘制散点图矩阵
+pairs(~ Fertility + Education + Agriculture + Infant.Mortality,
+      data = swiss,
+      main = "Scatterplot Matrix of Swiss Dataset",
+      pch = 19, col = "darkblue")
+
+# 3. 构建完整多元线性回归模型 (Full Model)
+model_full <- lm(Fertility ~ Education + Agriculture + Infant.Mortality,
+                 data = swiss)
+
+# 输出模型摘要
+summary(model_full)
+```
+
+### 模型结果解析
+
+线性回归评估的是在**控制其他变量不变**的情况下，单一自变量对因变量的独立贡献。
+
+- **回归系数（$\beta$）**：表示自变量每改变一个单位，`Fertility` 的预期变化量。这里，`Education` 的系数为负，说明教育水平越高，生育率越低；`Agriculture` 的系数为负，说明农业就业比例越高，生育率越低；`Infant.Mortality` 的系数为正，说明婴儿死亡率越高，生育率越高。
+- **显著性（p-value）**：如果在 $\alpha = 0.05$ 阈值下，$p < 0.05$，说明该变量对因变量有统计学意义上的独立预测价值。这里，`Education` 和 `Infant.Mortality` 的 p 值都小于 0.01，表明它们是生育率的重要预测因子；而 `Agriculture` 的 p 值为大于 0.05，说明其独立贡献不显著。
+- **模型整体评估（F-test）**：其 `p-value` 表示这三个变量作为一个整体是否能够显著解释生育率的变异。这里的 p 值极小，说明整体模型是显著的。
+
+---
+
+## 模型降维与比较
+
+在多元回归中，包含不显著的变量会引入噪声，增加方差。通常通过剔除 $p > 0.05$ 的变量来获得更简约的模型。由于这里 `Agriculture` 的 p 值不显著，我们将其剔除，构建简化模型（Reduced Model），并比较两个模型的 $R^2$、Adjusted $R^2$ 以及使用 ANOVA 检验两者的显著性差异。
+
+```{r}
+# 提取模型系数和 p-value，确定需要剔除的变量
+# 在本数据集的这组变量中，Agriculture 是不显著的
+model_reduced <- lm(Fertility ~ Education + Infant.Mortality, data = swiss)
+summary(model_reduced)
+
+# 比较 R-squared 和 Adjusted R-squared
+r2_full <- summary(model_full)$r.squared
+adj_r2_full <- summary(model_full)$adj.r.squared
+
+r2_reduced <- summary(model_reduced)$r.squared
+adj_r2_reduced <- summary(model_reduced)$adj.r.squared
+
+cat(glue("完整模型 R-squared: {r2_full}, 
+         Adjusted R-squared: {adj_r2_full}\n"))
+cat(glue("简化模型 R-squared: {r2_reduced}, 
+         Adjusted R-squared: {adj_r2_reduced}\n"))
+
+# 使用 ANOVA 检验嵌套模型间的显著性差异
+anova(model_reduced, model_full)
+```
+
+### 模型结果解析
+
+- **R-squared** vs **Adjusted R-squared**：表示模型解释了因变量变异的百分比。简化模型的 R-squared 略有下降，但 Adjusted R-squared 却略有提升，说明剔除 `Agriculture` 后模型的解释力并未降低，反而更简洁。
+- **ANOVA 检验**：p 值大于 0.05，说明简化模型与完整模型之间没有显著差异，进一步支持剔除 `Agriculture` 的合理性。
+
+---
+
+## 逻辑回归与模型差异解析
+
+将连续的 `Fertility` 强制转换为二元分类变量，并拟合广义线性模型（GLM）。
+
+```{r}
+# 1. 设定阈值，构建二分类目标变量
+median_fertility <- median(swiss$Fertility)
+swiss$high_fertility <- ifelse(swiss$Fertility > median_fertility, 1, 0)
+
+# 2. 构建逻辑回归模型
+model_logit <- glm(high_fertility ~ Education + Agriculture + Infant.Mortality,
+                   data = swiss,
+                   family = binomial)
+
+# 输出模型摘要
+summary(model_logit)
+```
+
+### 为什么同一组自变量在两个模型中的效应量与显著性存在差异？
+
+这种差异是由这两种统计模型的**数学架构**与**数据信息量**本质不同所导致的：
+
+1. **量纲与效应量解释不同**：
+- **线性回归**建模的是连续响应变量的均值 $\mathbb{E}(Y)$。系数 $\beta$ 表示自变量单位增加所导致的 `Fertility` **绝对数值**的线性增减。
+- **逻辑回归**建模的是对数几率 $\ln(\frac{p}{1-p})$。系数 $\beta$ 表示自变量单位增加所导致的“高于中位数生育率”的**对数发生比（Log-odds）** 的变化。两者在数学空间上不可通约。
+
+2. **人为二值化导致严重的信息丢失**：
+将连续变量离散化为 0 和 1 是一种激进的降维。例如，原本生育率为 $80$ 和 $90$ 的地区存在显著差异，但在二值化后都被平等地视为 $1$。这极大地抹平了组内的方差分布。
+
+3. **统计功效下降**：
+由于上述的信息丢失，逻辑回归的拟合所能利用的数据颗粒度变粗，模型的残差和不确定性上升。这通常会导致标准误变大，从而拉低了检验统计量 (Z-value)，使得原本在线性模型中显著的变量在逻辑模型中变得不显著（即假阴性风险增加）。这也是为什么在科研设计中，通常不建议将能够连续测量的指标人为转化为二值指标的原因。

@@ -1,0 +1,70 @@
+**数据准备与预处理**：
+首先加载内置的 `PlantGrowth` 数据集，只提取 `trt1` 和 `trt2` 两个处理组的数据。
+
+```{r}
+# 加载数据集
+data("PlantGrowth")
+
+# 提取 trt1 和 trt2 的子集
+trt_data <- subset(PlantGrowth, group %in% c("trt1", "trt2"))
+
+# 为了消除不再使用的 'ctrl' 因子水平带来的潜在干扰，我们重新定义因子
+trt_data$group <- factor(trt_data$group)
+
+# 检查子集是否提取成功
+table(trt_data$group)
+```
+
+## 统计假设检验
+
+在进行均值比较之前，先验证独立样本 t 检验的两个核心前提：正态性和方差齐性。
+
+### 正态性检验（Shapiro-Wilk Test）
+
+分别对 `trt1` 和 `trt2` 组的数据进行正态性检验。
+
+```{r}
+# 分离数据以便检验
+w_trt1 <- trt_data$weight[trt_data$group == "trt1"]
+w_trt2 <- trt_data$weight[trt_data$group == "trt2"]
+
+# 执行 Shapiro-Wilk 检验
+(shapiro_trt1 <- shapiro.test(w_trt1))
+(shapiro_trt2 <- shapiro.test(w_trt2))
+```
+
+**结论**：`tr1` 和 `trt2` 组的 p 值分别为 `r shapiro_trt1$p.value` 和 `r shapiro_trt2$p.value`，都大于 0.05，认为数据满足正态分布的假设。
+
+### 方差齐性检验（F-test）
+
+检验两组植物重量的方差是否相等。
+
+```{r}
+# 执行方差齐性检验
+(var_test_res <- var.test(weight ~ group, data = trt_data))
+```
+
+**结论**：方差齐性检验的 p 值为 `r var_test_res$p.value`，大于 0.05，认为两组方差齐。
+
+---
+
+## 均值差异分析
+
+由于满足独立样本 t 检验的前提条件，故使用**标准的独立样本 t 检验**。
+
+- **$H_0$**: `trt1` 和 `trt2` 肥料处理下的植物平均重量没有显著差异 ($\mu_{trt1} = \mu_{trt2}$)。
+- **$H_1$**: 两种处理下的平均重量存在显著差异 ($\mu_{trt1} \neq \mu_{trt2}$)。
+
+```{r}
+# 执行独立样本 t 检验（var.equal = TRUE）
+(t_test_res <- t.test(weight ~ group, data = trt_data, var.equal = TRUE))
+
+# 数据可视化：绘制箱线图（可选）
+boxplot(weight ~ group, data = trt_data,
+        col = c("lightblue", "lightgreen"),
+        main = "Plant Weight Comparison: trt1 vs trt2",
+        ylab = "Dried weight",
+        xlab = "Treatment group")
+```
+
+**结论**：t 检验的 p 值为 `r t_test_res$p.value`，小于 0.01，拒绝 $H_0$，认为 `trt1` 和 `trt2` 处理下的植物平均重量存在极显著差异。

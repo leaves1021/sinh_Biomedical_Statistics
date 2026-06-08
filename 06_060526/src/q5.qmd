@@ -1,0 +1,136 @@
+## 单细胞 RNA-seq 标准分析流程
+
+在单细胞 RNA-seq 数据分析中，Seurat 是最流行的 R 包之一。它提供了从数据预处理、质控过滤、标准化、降维、聚类到差异表达分析的一站式解决方案。以下是题目给出的典型 Seurat 工作流程：
+
+```{r}
+# 加载必要的 R 包
+library(Seurat)
+library(dplyr)
+library(patchwork)
+
+# 1. 加载 10X 数据并创建 Seurat 对象
+pbmc.data <- Read10X(data.dir = 'data/raw/filtered_gene_bc_matrices/hg19/')
+pbmc <- CreateSeuratObject(
+  counts = pbmc.data,
+  project = "pbmc3k",
+  min.cells = 3,     # 过滤掉在少于 3 个细胞中表达的基因
+  min.features = 200 # 过滤掉表达少于 200 个基因的细胞
+)
+
+# 2. 质控与过滤
+pbmc[['percent.mt']] <- PercentageFeatureSet(pbmc, pattern = "^MT-") # 计算线粒体基因占比
+pbmc <- subset(
+  pbmc,
+  subset = nFeature_RNA > 200 & # 过滤掉表达基因数量极少的“空液滴”
+    nFeature_RNA < 2500 &       # 过滤掉表达基因数量极高的“双胞/多胞”
+    percent.mt < 5              # 过滤掉线粒体基因表达比例过高的细胞
+)
+
+# 3. 标准化
+pbmc <- NormalizeData(
+  pbmc,
+  normalization.method = "LogNormalize", # 采用总计数归一化并进行 log 转换
+  scale.factor = 10000                   # 将每个细胞的总计数缩放到 10000，类似于 TPM/CPM 的概念
+)
+
+# 4. 寻找高变基因并缩放
+pbmc <- FindVariableFeatures(
+  pbmc,
+  selection.method = "vst", # 使用方差稳定变换方法寻找高变基因
+  nfeatures = 2000          # 选择表达量变化最大的 2000 个基因作为后续分析的特征
+)
+all.genes <- rownames(pbmc) # 获取所有基因的名称
+pbmc <- ScaleData(pbmc, features = all.genes) # 对所有基因进行缩放，使其均值为 0，方差为 1
+
+# 5. 线性降维（PCA）
+pbmc <- RunPCA(
+  pbmc,
+  features = VariableFeatures(object = pbmc) # 仅使用高变基因进行 PCA 降维
+)
+ElbowPlot(pbmc, ndims = 25) # 绘制 Elbow Plot 以帮助确定保留多少个主成分（PCs）
+
+# 6. 非线性聚类与 UMAP 降维
+pbmc <- FindNeighbors(pbmc, dims = 1:20) # 基于前 20 个 PCs 构建 KNN 图
+pbmc <- FindClusters(
+  pbmc,
+  resolution = 0.5
+) # 使用 Louvain 算法进行社区检测，resolution 参数控制聚类的细粒度
+pbmc <- RunUMAP(pbmc, dims = 1:20) # 在前 20 个 PCs 上运行 UMAP 进行非线性降维
+DimPlot(pbmc, reduction = "umap", label = TRUE) # 绘制 UMAP 图并标注聚类结果
+
+# 7. 寻找 Marker 基因
+cluster_markers <- FindAllMarkers(
+  pbmc,
+  only.pos = TRUE,       # 仅返回在某个 cluster 中上调的基因
+  min.pct = 0.25,        # 仅考虑在至少 25% 的细胞中表达的基因
+  logfc.threshold = 0.25 # 仅考虑 log2 fold change 大于 0.25 的基因
+)
+top10 <- cluster_markers %>%
+  group_by(cluster) %>%          # 按 cluster 分组
+  top_n(n = 10, wt = avg_log2FC) # 每个 cluster 选择 log2 fold change 最大的前 10 个基因
+head(top10)
+```
+
+*（实际上，2025 年本人在神经所孙怡迪课题组轮转期间已充分实践过该流程，但因时间久远且本人已不再从事相关研究，故细节已有所遗忘。）*
+
+---
+
+## 核心原理问题解答
+
+### 问题 1: barcodes, genes, matrix 这三个文件分别代表什么？
+
+在 10X Genomics 平台的输出格式中（也是 `Read10X` 函数默认读取的格式），这三个文件共同构成了一个稀疏矩阵（Sparse Matrix）：
+
+1. **`barcodes.tsv`（列名）**：包含了被测序的每一个独立“细胞”的条形码序列（如 `AAACATACAACCAC-1`）。在矩阵中代表所有的“列”。
+2. **`genes.tsv`（行名）**：包含了所有检测到的基因信息（包括 Ensembl ID 和对应的基因名称）。在矩阵中代表所有的“行”。
+3. **`matrix.mtx`（数值）**：这是一个稀疏坐标格式的数据文件。它只记录非零的表达量，其结构通常为三列 `(行索引，列索引，UMI counts 计数)`。这种设计极大地节省了硬盘空间，因为单细胞数据通常极其稀疏（90% 以上的数值为 0）。
+
+### 问题 2: 质控过滤条件的目的是什么？还有其他条件吗？
+
+**代码中过滤条件的目的**：
+
+- `nFeature_RNA > 200`：过滤掉表达基因数量极少的“空液滴”，这些通常是没有包裹到完整细胞的背景噪音。
+- `nFeature_RNA < 2500`：过滤掉表达基因数量极高的“双胞/多胞”，即一个液滴中意外包裹了两个或多个细胞，导致基因种类异常增多。
+- `percent.mt < 5`：过滤掉线粒体基因表达比例过高（大于 5%）的细胞。这通常代表了破裂的、濒死的或质量极差的细胞（细胞质 RNA 流失，只剩下被线粒体膜包裹的线粒体 RNA）。
+
+
+**其他常见的过滤条件**：
+
+- **红细胞基因过滤**（如核糖体蛋白基因比例 `percent.rb` 或血红蛋白基因序列）：目的在于去除实验样本（如 PBMC）中意外混入或未能裂解的成熟红细胞带来的噪音。*（我就曾在分析肿瘤组织时，因未进行红细胞过滤，而在聚类后得到“红细胞 cluster”。）*
+- **总 UMI 数（`nCount_RNA`）过滤**：防止某些细胞因测序深度过高而带来偏差。
+
+### 问题 3: 为什么需要标准化？LogNormalize 的思想是什么？
+
+**为什么标准化**：
+
+不同的单细胞在测序时，由于起始 RNA 量的微小差异或文库制备时的 PCR 扩增效率不同，导致每个细胞最终被测到的总 UMI 数量（测序深度）各不相同。如果不进行标准化，我们将无法直接比较同一基因在两个不同细胞中的相对表达量。
+
+**LogNormalize 的基本思想**：
+
+它采用的是**“总计数归一化”**。具体步骤为：
+
+1. 将每个细胞中每个基因的计数除以该细胞的总计数（消除深度差异）。
+2. 乘以一个缩放因子（scale factor，默认 10000）（将其转换为类似 TPM/CPM 的概念，使数值在易处理的范围内）。
+3. 对结果进行自然对数转换（加 1 以处理 0 值：$\ln(x+1)$）（以减小极大值的影响，使分布更接近正态分布，利于后续线性模型的计算）。
+
+### 问题 4: PCA 的目的及主成分的意义？如何判断 PC 数量？
+
+- **PCA 的目的**：单细胞数据可能包含数万个基因（即维度高达上万）。PCA 旨在进行**线性降维**和**去噪**，它通过提取数据方差最大的几个正交轴，用少量的综合特征替换原始基因，从而突破“维度灾难”。
+- **PC 的意义**：PC1 是原始基因的某种线性组合，它解释了细胞群中**最大**的生物学或技术变异。PC2 解释了剩余变异中最大的一部分，以此类推。
+- **结合 ElbowPlot 判断 PC 数量**：`ElbowPlot`（碎石图/肘形图）展示了每个 PC 解释的方差百分比。我们通常会寻找曲线出现明显弯折、变平缓的那个“肘部 (Elbow)”。在肘部之后的 PC 对解释整体差异的贡献已经非常微弱，通常被视为纯粹的技术噪音。对于 `pbmc3k` 数据集，这个肘部出现在 PC 10 附近。
+
+### 问题 5: UMAP 图中两个 cluster 分得很开说明什么？
+
+UMAP 的核心目标是将高维距离投影到二维平面。如果两个 cluster（细胞亚群）在 UMAP 图上分得非常开，这说明：
+这两个细胞群在**全局的转录组特征上存在着巨大且根本的生物学差异**。它们极可能是完全不同谱系的细胞类型（例如：T 细胞亚群和 B 细胞亚群，或免疫细胞与上皮细胞的区别）。距离越远，通常意味着它们在其分化发育路径上的距离越远。
+
+### 问题 6: Seurat FindAllMarkers 默认假设检验方法及其原因？
+
+**默认检验方法**：
+
+**Wilcoxon 秩和检验（Wilcoxon Rank Sum Test）**（也就是在 Homework 4 和 5 中反复讨论过的非参数检验）。
+
+**选择这种方法的原因**：
+
+1. **非正态性**：单细胞 RNA-seq 数据的基因表达量存在严重的**过离散现象**和**零膨胀特征（大量的 Drop-outs）**，绝对不可能服从正态分布。
+2. **抗干扰极强**：Wilcoxon 检验基于 Rank 而非绝对表达数值，因此它对离群值（某个细胞某基因偶然被测出极高数值）非常稳健。它在控制假阳性方面表现极佳，被整个单细胞数据科学领域公认为性能最可靠的“金标准”基础检验工具。
