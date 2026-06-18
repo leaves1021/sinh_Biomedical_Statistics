@@ -1,0 +1,603 @@
+---
+title: "homework 6-答案版"
+date: "2026/6/5"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(cache = FALSE)
+setwd("E:\\000_desktop\\研四下\\生物医学统计学-2025级\\作业")
+```
+
+## Q1
+
+A botany lab is testing two fertilizer treatments (trt1 and trt2) on plant growth. Using the PlantGrowth dataset (preloaded in R), complete the analysis in the following two parts: (1) Check statistical assumptions (normality and variance homogeneity); (2) analyze whether the treatments produce significantly different mean weights (α = 0.05).
+
+### Anwser:
+
+```{r eval=F}
+# Load data
+data(PlantGrowth)
+trt1 <- subset(PlantGrowth, group == "trt1")$weight
+trt2 <- subset(PlantGrowth, group == "trt2")$weight
+# Normality Check (Shapiro-Wilk Test)
+shapiro_trt1 <- shapiro.test(trt1)
+shapiro_trt2 <- shapiro.test(trt2)
+
+print(shapiro_trt1)
+## 
+##  Shapiro-Wilk normality test
+## 
+## data:  trt1
+## W = 0.93041, p-value = 0.4519
+print(shapiro_trt2)
+## 
+##  Shapiro-Wilk normality test
+## 
+## data:  trt2
+## W = 0.94101, p-value = 0.5643
+cat("\n结论：\n")
+## 
+## 结论：
+if (shapiro_trt1$p.value > 0.05 & shapiro_trt2$p.value > 0.05) {
+  cat("两组数据均服从正态分布 (p > 0.05)\n\n")
+} else {
+  cat("至少有一组数据不服从正态分布\n\n")
+}
+## 两组数据均服从正态分布 (p > 0.05)
+var_test <- var.test(trt1, trt2)
+print(var_test)
+## 
+##  F test to compare two variances
+## 
+## data:  trt1 and trt2
+## F = 3.216, num df = 9, denom df = 9, p-value = 0.0968
+## alternative hypothesis: true ratio of variances is not equal to 1
+## 95 percent confidence interval:
+##   0.7988084 12.9475894
+## sample estimates:
+## ratio of variances 
+##           3.215998
+cat("\n结论：\n")
+## 
+## 结论：
+if (var_test$p.value > 0.05) {
+  cat("方差齐性假设成立 (p =", round(var_test$p.value, 3), ")\n\n")
+} else {
+  cat("方差不齐 (p =", round(var_test$p.value, 3), ")\n\n")
+}
+## 方差齐性假设成立 (p = 0.097 )
+# Select test method
+if (var_test$p.value > 0.05) {
+  t_test <- t.test(trt1, trt2, var.equal = TRUE)
+  test_type <- "Student's t检验（等方差）"
+} else {
+  t_test <- t.test(trt1, trt2, var.equal = FALSE)
+  test_type <- "Welch's t检验（异方差）"
+}
+
+cat("选择的检验方法:\n")
+## 选择的检验方法:
+cat("", test_type, "\n")
+##  Student's t检验（等方差）
+cat("选择依据：", 
+    ifelse(var_test$p.value > 0.05, 
+           "方差齐性检验通过 (p > 0.05)", 
+           "方差齐性检验未通过 (p ≤ 0.05)"), "\n\n")
+## 选择依据： 方差齐性检验通过 (p > 0.05)
+# t-test
+cat("t检验结果:\n")
+## t检验结果:
+print(t_test)
+## 
+##  Two Sample t-test
+## 
+## data:  trt1 and trt2
+## t = -3.0101, df = 18, p-value = 0.007518
+## alternative hypothesis: true difference in means is not equal to 0
+## 95 percent confidence interval:
+##  -1.4687336 -0.2612664
+## sample estimates:
+## mean of x mean of y 
+##     4.661     5.526
+if (t_test$p.value < 0.05) {
+  cat("在α=0.05水平上拒绝原假设\n")
+  cat("trt1（均值=", round(mean(trt1)), "与trt2（均值=", round(mean(trt2)), 
+      ")的植物重量存在显著差异（p =", format.pval(t_test$p.value, digits = 3), ")\n")
+} else {
+  cat("没有足够证据拒绝原假设\n")
+  cat("未发现两组肥料处理的植物重量存在显著差异（p =", 
+      format.pval(t_test$p.value, digits = 3), ")\n")
+}
+## 在α=0.05水平上拒绝原假设
+## trt1（均值= 5 与trt2（均值= 6 )的植物重量存在显著差异（p = 0.00752 )
+```
+
+
+
+## Q2
+
+A research team is investigating the effects of different anti-tumor drugs on the proliferation ability of lung cancer cells. In the experiment, "cell viability" (unit in "% of control") was used as the evaluation indicator. The researchers set up four experimental groups, each with 6 biological replicates. The data are in the file "homework6-Q2.csv".
+
+The researchers first compared whether there were differences among the different drug treatment groups, and then further examined the combined effects of drug type and treatment time on cell viability.
+
+(1) Please use ANOVA to evaluate whether there are differences among the different drug treatments. If the ANOVA result is significant, please compare which groups have significant differences?
+
+(2) Please use Two-way ANOVA to analyze: Does drug type `drug` significantly affect cell viability? Does treatment time `time` significantly affect cell viability? If both drug type and treatment time have significant effects on cell viability, please use `pairwise.t.test()` to compare the differences among all Drug-Time combinations, and use the BH method for multiple testing correction, and provide a brief summary.
+
+### Answer:
+
+##### 问题 1 part1
+
+
+
+```{r one-way-anova}
+data1 <- read.csv("homework6-Q2.csv", row.names = 1, check.names = FALSE)
+head(data1)
+
+# 正态性检验：对每一组分别进行 Shapiro-Wilk test
+by(data1$viability, data1$drug, shapiro.test)
+
+# 方差齐性检验：Bartlett test
+bartlett.test(viability ~ drug, data = data1)
+
+# One-way ANOVA
+fit1 <- aov(viability ~ drug, data = data1)
+summary(fit1)
+```
+
+##### 结论1
+
+各组数据近似服从正态分布且各组方差齐性成立。
+One-way ANOVA 中 `drug` 的 P 值小于 0.05，说明不同药物之间的细胞活性存在显著差异，即至少有一组与其他组不同。因此我们继续事后检验。
+
+##### 问题1 part2
+
+```{r tukey-hsd}
+TukeyHSD(fit1)
+```
+
+##### 结论2
+
+我们观察到：
+
+- Control 与 DrugA、DrugB、DrugC 存在显著差异；
+- DrugA 与 DrugB 存在显著差异；
+- DrugB 与 DrugC 存在显著差异；
+- DrugA 与 DrugC 不存在显著差异。
+
+##### 问题2 part1
+
+```{r two-way-anova}
+fit2 <- aov(viability ~ drug * time, data = data1)
+summary(fit2)
+```
+
+##### 结论3
+
+- 药物类型显著影响细胞活性；但处理时间不显著影响细胞活性；
+- 药物类型和处理时间之间有显著交互作用。
+
+##### 问题2 part2
+
+```{r create-combined-group}
+data1$Group <- paste(data1$drug, data1$time, sep = "_")
+
+pairwise.t.test(
+  x = data1$viability,
+  g = data1$Group,
+  p.adjust.method = "BH"
+)
+```
+
+##### 结论4
+
+- DrugB_48h组细胞活性最低；
+- DrugB_48h与其他组存在显著差异,提示可能效果最好；
+- DrugA和DrugC在24h和48h区间中不太能看出时间对其的影响，但DrugB明显会随时间对癌细胞抑制效果增强；
+
+
+
+
+## Question 3
+
+Using the built-in R dataset swiss, we will explore the relationships between socioeconomic factors and fertility, and build different regression models. Please answer the following three questions:
+
++ 1. Draw a scatterplot matrix for the variables Fertility, Education, Agriculture, and Infant.Mortality. Then, build a multiple linear regression model with Fertility as the dependent variable and the other three as independent variables, and interpret the model summary.
++ 2. Based on the significance of the variables (α = 0.05) in the full linear model, remove the insignificant ones to build a simplified model. Compare the R² and Adjusted R² between the full and simplified models, and use ANOVA to test for significant differences between them.
++ 3. Create a binary variable high_fertility (1 = Fertility > median, 0 = otherwise). Build a logistic regression model using high_fertility as the dependent variable, with Education,Agriculture and Infant.Mortality as independent variables. Why do the effect size and significance differ between the two models(linear model vs. logistic model), even though they use the same variable?
+
+### Answer:
+
+```{r}
+# Q3-1 
+## check data
+data("swiss")
+print(swiss)
+## scatterplot matrix plot 
+###method1
+pairs(swiss[, c("Fertility", "Education", "Agriculture", "Infant.Mortality")], )
+###method2
+library("GGally")
+ggpairs(swiss[, c("Fertility", "Education", "Agriculture", "Infant.Mortality")], aes(alpha=0.5))
+## lm 
+model<-lm(Fertility~Education+Agriculture+Infant.Mortality,data=swiss)
+summary(model)
+## interpret
+## 这里教育和婴儿死亡率都对生育率有较强的显著性，其中教育率每提高1%，生育率平均下降0.86个单位，婴儿死亡率每上升1%，生育率平均上升1.49个单位，而农业占比与生育率无明确线性关联。
+
+# Q3-2
+## construct simple model
+simple_model<-lm(Fertility~Education+Infant.Mortality,data=swiss)
+##compare R
+cat("whole model:   R² =", summary(model)$r.squared, 
+    ", adjusted R² =", summary(model)$adj.r.squared, "\n")
+cat("simple model: R² =", summary(simple_model)$r.squared, 
+    ", adjusted R² =", summary(simple_model)$adj.r.squared, "\n")
+## anova test compare
+anova(model,simple_model)
+## 检验后结论显示两个model没有明显区别（p=0.722），不拒绝原假设，认为简化模型和全模型拟合效果无明显差异.
+
+#Q3-3
+## generate binary variable
+median_fer<-median(swiss$Fertility)
+swiss$high_fertility<-factor(ifelse(swiss$Fertility>median_fer,1,0),labels=c("High","Low"))
+model_logit<-glm(high_fertility~Education+Infant.Mortality,data=swiss,family = binomial)
+summary(model_logit)
+```
+
+
+**explanation**
+
+The two models answer different questions with different scales:
+
+Linear regression: "How much does Fertility change per 1% increase in Education?"
+
+→ β = −0.81 means fertility drops by 0.81 units (continuous outcome).
+
+Logistic regression: "How do the odds of being in the 'High Fertility' group change?"
+
+→ β = −0.16 means the odds decrease by 16% (binary outcome).
+
+The slightly larger p-value in logistic regression (0.005 vs. <0.001) mainly reflects:
+
+1. Information loss: Binarizing Fertility discards within-group variation.
+2. Nonlinear link: The logit transformation compresses effects near probability boundaries.
+3. Test differences: Wald tests (logistic) are less powerful than t-tests (linear) in small samples (n=47).
+
+
+## Question 4
+
+Using the R built-in dataset USArrests, complete the following analysis:
+
+1. Use prcomp() to perform PCA on USArrests. Calculate the proportion of variance explained by each principal component. Report the cumulative variance explained by PC1 and PC2. If the cumulative variance explained should exceed 90%, determine the minimum number of principal components to retain.
+2. Use biplot() to visualize the PCA result. Based on the direction and length of the variable arrows, identify which variables may be positively correlated and which variables contribute more strongly to the PC1-PC2 plane. Briefly interpret what PC1 and PC2 may represent.
+3. Extract the scores of PC1 and PC2, and perform K-means clustering on the 50 states with K = 3. Output the cluster assignment for each state, and briefly describe the crime characteristics represented by different clusters.
+4. Plot the states in the PC1-PC2 space and color them by K-means cluster. Comment on whether the clusters are clearly separated or partially overlapping. Finally, briefly evaluate the advantages and limitations of the “PCA dimensionality reduction + K-means clustering” workflow.
+
+### Answer
+
+```{r}
+data(USArrests)
+crime_scaled <- scale(USArrests)
+
+# 1. PCA 分析与方差解释率
+pca_res <- prcomp(crime_scaled, center = FALSE, scale. = FALSE)
+pve <- (pca_res$sdev^2) / sum(pca_res$sdev^2)
+cum_pve <- cumsum(pve)
+
+pve
+cum_pve
+
+pc12_pve <- sum(pve[1:2])
+pc12_pve
+
+n_pc_90 <- which(cum_pve > 0.90)[1]
+n_pc_90
+```
+
+
+
+各主成分的方差解释率约为PC1 ≈ 62.0% PC2 ≈ 24.7% PC3 ≈ 8.9% PC4 ≈ 4.3%，PC1 和 PC2 一共解释了约86.8%的变异，如果希望累计方差解释率超过 90%，至少需要保留 3 个主成分。
+
+```{r}
+# 2. PCA biplot 与变量解释
+biplot(
+  pca_res,
+  cex = 0.7,
+  main = "PCA Biplot of USArrests"
+)
+pca_res$rotation
+```
+
+
+
+从 biplot 和 loading 结果可以看出，Murder、Assault 和 Rape 的箭头方向较为接近，说明这些暴力犯罪变量之间可能存在正相关关系。也就是说，某些州如果谋杀率较高，袭击率和强奸率往往也可能较高。
+
+UrbanPop 的方向与其他犯罪变量不完全一致，说明城市人口比例和暴力犯罪变量之间的变化方向并不完全相同。
+
+从箭头长度看，Murder、Assault、Rape 在 PC1-PC2 平面中表现较明显，说明它们对前两个主成分的贡献较大。
+
+UrbanPop 对 PC2 的贡献较明显。PC1 可以理解为整体暴力犯罪水平的综合轴；PC2 可能更多反映城市人口比例与犯罪结构之间的差异。
+
+```{r}
+# 3. 基于前两个 PC 得分进行 K-means 聚类
+pc_scores <- pca_res$x[, 1:2]
+set.seed(42)
+k_res <- kmeans(
+  pc_scores,
+  centers = 3,
+  nstart = 25
+)
+
+cluster_result <- data.frame(
+  State = rownames(USArrests),
+  PC1 = pc_scores[, 1],
+  PC2 = pc_scores[, 2],
+  Cluster = k_res$cluster
+)
+
+print(cluster_result)
+
+cluster_summary <- aggregate(
+  USArrests,
+  by = list(Cluster = k_res$cluster),
+  FUN = mean
+)
+
+print(cluster_summary)
+```
+
+
+根据 cluster_summary 中各变量均值，可以将不同 cluster 解释为整体暴力犯罪水平较高、中等或较低的州群。具体哪个编号对应高犯罪或低犯罪，需要结合输出结果判断。
+
+```{r}
+# 4. PCA 空间中的 K-means 聚类可视化
+plot(
+  pc_scores[, 1],
+  pc_scores[, 2],
+  col = k_res$cluster,
+  pch = 19,
+  xlab = "PC1",
+  ylab = "PC2",
+  main = "K-means Clustering on PCA Scores"
+)
+
+text(
+  pc_scores[, 1],
+  pc_scores[, 2],
+  labels = rownames(USArrests),
+  pos = 3,
+  cex = 0.6
+)
+
+legend(
+  "topright",
+  legend = paste("Cluster", 1:3),
+  col = 1:3,
+  pch = 19
+)
+```
+
+
+从 PC1-PC2 空间中的聚类散点图可以看出，不同 cluster 在 PC1 方向上通常具有较明显的分离，而在 PC2 方向上可能存在一定重叠。这说明 K-means 聚类结果主要反映了 PC1 所代表的整体暴力犯罪水平差异。由于 PC1 的方差解释率高于 PC2，直接在 PC scores 上进行 K-means 时，PC1 对欧氏距离的影响通常更大，因此聚类边界可能更接近沿 PC1 方向进行划分。如果希望 PC1 和 PC2 在聚类中具有相同权重，可以考虑对 pc_scores 再次标准化后进行 K-means；如果希望保留主成分方差大小所代表的信息，则直接使用原始 PC scores 也是合理的。
+
+“PCA + K-means” 组合方法的综合评价
+
+优点：
+
++ 1）PCA 将相关性较强的原始变量转换为相互正交的主成分，能够减少变量相关性对后续距离计算和可视化解释的影响。
++ 2）PCA 可以将主要变异集中到少数几个主成分中，减少低解释率成分对可视化和聚类的影响。
++ 3）高维可视化： 将 4 维的数据压缩到 2 维平面，能够直观地观察聚类分布。
+
+局限性：
+
++ 1）线性假设： PCA 只能捕获线性结构，若变量间存在复杂的非线性几何拓扑，降维会丢失关键信息。
++ 2）K-means 需要人为指定 K 值，属于硬聚类方法，会将每个州强制划入某一类。对于边界不清晰或处于过渡状态的州，K-means 的划分可能较为武断。
++ 3）此外，K-means 基于欧氏距离，因此聚类结果会受到变量尺度、主成分方差大小以及异常值的影响。
+ 
+
+## Question 5 (多组学数据分析的实战应用)
+
+**数据： "pbmc3k_filtered_gene_bc_matrices.tar.gz"**
+
++ 下载链接： https://cf.10xgenomics.com/samples/cell/pbmc3k/pbmc3k_filtered_gene_bc_matrices.tar.gz
++ 文件体积 7.26 MB，解压后的文件结构如下：
+
+```
+└─filtered_gene_bc_matrices
+    └─hg19
+            barcodes.tsv
+            genes.tsv
+            matrix.mtx
+```
+
+**任务：**
+
+1. 在R中安装 Seurat 
+2. 解压文件并运行下面的代码，记录输出。提交作业时需包含代码运行结果
+3. 回答代码注释中的问题
+
+```{r eval=F}
+library(Seurat)
+library(dplyr)
+library(patchwork)
+
+## 解压文件以后，把"filtered_gene_bc_matrices"文件夹和当前代码放在一起
+
+pbmc.data <- Read10X(data.dir = './filtered_gene_bc_matrices/hg19/')
+pbmc <- CreateSeuratObject(
+  counts = pbmc.data,
+  project = "pbmc3k",
+  min.cells = 3,
+  min.features = 200
+)
+
+## 问题1：数据通常包含三个文件（barcodes，genes，matrix），请解释这三个文件分别代表什么？
+
+pbmc[['percent.mt']] <- PercentageFeatureSet(pbmc,pattern = "^MT-")#查找线粒体基因
+pbmc <- subset(pbmc,
+  subset = nFeature_RNA > 200 &
+           nFeature_RNA < 2500 &
+           percent.mt < 5 )
+
+## 问题2：请解释上述代码中，每个过滤条件的目的。除了上面的三个过滤条件外，还有其他滤条件吗，这些过滤条件的目的分别是什么？
+
+pbmc <- NormalizeData(pbmc,
+  normalization.method = "LogNormalize",
+  scale.factor = 10000)
+
+## 问题3：为什么需要对单细胞 UMI count 进行标准化？ LogNormalize 的基本思想又是什么？
+
+pbmc <- FindVariableFeatures(pbmc,
+  selection.method = "vst",
+  nfeatures = 2000)
+all.genes <- rownames(pbmc)
+pbmc <- ScaleData(pbmc, features = all.genes)
+pbmc <- RunPCA(pbmc,
+  features = VariableFeatures(object = pbmc))
+ElbowPlot(pbmc,ndims = 25)
+
+## 问题4：PCA 的目的是什么？PC1、PC2、PC3 分别代表什么？结合ElbowPlot，如何判断使用多少个 PC 进行后续分析？
+
+pbmc <- FindNeighbors(pbmc, dims = 1:20)
+pbmc <- FindClusters( pbmc, resolution = 0.5)
+pbmc <- RunUMAP(pbmc, dims = 1:20)
+DimPlot(pbmc,
+  reduction = "umap",
+  label = TRUE
+)
+
+## 问题5：UMAP 是一种非线性降维算法，其主要作用是将 PCA 后的高维细胞表达数据映射到二维或三维空间，同时尽可能保留细胞之间的邻近关系。在 UMAP 图中，如果两个 cluster 分得很开，可能说明什么？
+
+cluster_markers <- FindAllMarkers(
+  pbmc,
+  only.pos = TRUE,
+  min.pct = 0.25,
+  logfc.threshold = 0.25
+)
+library(dplyr)
+top10 <- cluster_markers%>% group_by(cluster) %>% top_n(n = 10,wt = avg_log2FC)
+head(top10)
+
+## 问题6：FindAllMarkers步骤通过比较基因表达量寻找每个cluster的标记基因，其中涉及了假设检验的步骤。在Seurat中，默认的检验方法是什么？为什么Seurat选择这种方法进行假设检验？
+```
+
+### Answer
+
+```{r echo=F, include=T}
+library(Seurat)
+library(dplyr)
+library(patchwork)
+pbmc.data <- Read10X(data.dir = './filtered_gene_bc_matrices/hg19/')
+pbmc <- CreateSeuratObject(
+  counts = pbmc.data,
+  project = "pbmc3k",
+  min.cells = 3,
+  min.features = 200
+)
+pbmc[['percent.mt']] <- PercentageFeatureSet(pbmc,pattern = "^MT-")#查找线粒体基因
+pbmc <- subset(pbmc,
+  subset = nFeature_RNA > 200 &
+           nFeature_RNA < 2500 &
+           percent.mt < 5 )
+pbmc <- NormalizeData(pbmc,
+  normalization.method = "LogNormalize",
+  scale.factor = 10000)
+pbmc <- FindVariableFeatures(pbmc,
+  selection.method = "vst",
+  nfeatures = 2000)
+all.genes <- rownames(pbmc)
+pbmc <- ScaleData(pbmc, features = all.genes)
+pbmc <- RunPCA(pbmc,
+  features = VariableFeatures(object = pbmc))
+ElbowPlot(pbmc,ndims = 25)
+pbmc <- FindNeighbors(pbmc, dims = 1:20)
+pbmc <- FindClusters( pbmc, resolution = 0.5)
+pbmc <- RunUMAP(pbmc, dims = 1:20)
+DimPlot(pbmc,
+  reduction = "umap",
+  label = TRUE
+)
+cluster_markers <- FindAllMarkers(
+  pbmc,
+  only.pos = TRUE,
+  min.pct = 0.25,
+  logfc.threshold = 0.25
+)
+library(dplyr)
+top10 <- cluster_markers%>% group_by(cluster) %>% top_n(n = 10,wt = avg_log2FC)
+head(top10)
+```
+
+
+##### 问题1：数据通常包含三个文件（barcodes，genes，matrix），请解释这三个文件分别代表什么？
+
++ barcodes.tsv: 	细胞条形码（Cell Barcode）, 	标识每个细胞
++ features.tsv（或 genes.tsv）: 	基因信息 ,	标识每一行对应哪个基因
++ matrix.mtx: 	稀疏表达矩阵, 	存储基因在细胞中的表达量
+
+##### 问题2：请解释上述代码中，每个过滤条件的目的。除了上面的三个过滤条件外，还有其他滤条件吗，这些过滤条件的目的分别是什么？
+
++ nFeature_RNA > 200：去除检测到基因数过少的细胞，这类细胞通常是空液滴、破裂细胞或低质量细胞。
++ nFeature_RNA < 2500：去除检测到基因数异常高的细胞，这类细胞可能是两个或多个细胞同时被捕获形成的 doublet。
++ percent.mt < 5：去除线粒体基因比例过高的细胞。高线粒体比例通常提示细胞受损或死亡，其表达谱可能影响后续分析结果
+
+除了上述过滤条件以外，还有下面这些过滤条件
+
++ nFeature_RNA： 	去除低质量细胞、doublet
++ nCount_RNA： 	去除低测序深度和 doublet
++ percent.mt： 	去除死亡细胞
++ percent.rb： 	去除异常核糖体富集细胞
++ HB genes： 	去除红细胞污染
++ Doublet score： 	去除双细胞
++ Ambient RNA： 	去除环境 RNA 污染
++ Cell Cycle score： 	减少细胞周期效应
++ Stress genes： 	去除解离应激细胞
+
+
+
+##### 问题3：为什么需要对单细胞 UMI count 进行标准化？ LogNormalize 的基本思想又是什么？
+
+对单细胞 UMI count 进行标准化的主要原因是：
+
++ 不同细胞测序深度不同（总 UMI 差异巨大）。
++ 不同细胞捕获效率不同（技术噪音）。
++ 直接比较原始 count 会把技术差异误认为生物学差异。
++ 标准化后表达量变为相对丰度，可在细胞间公平比较。
++ log 转换压缩动态范围，使 PCA、UMAP 和聚类更稳定。
++ 本质上是在消除“测了多少”的影响，突出“表达了什么”的差异。
+
+LogNormalize 的基本思想具体包括三步：
+
++ 除以总UMI：消除测序深度差异；
++ 乘以10000：转换为统一尺度（CP10K）；
++ log(1+x)：压缩动态范围，使数据更适合 PCA、UMAP 和聚类。
+
+其目标是让不同细胞之间的表达量能够公平比较，并尽可能反映真实的生物学差异而非技术差异。
+
+
+
+##### 问题4：PCA 的目的是什么？PC1、PC2、PC3 分别代表什么？结合ElbowPlot，如何判断使用多少个 PC 进行后续分析？
+
+PCA 前通常需要进行中心化和标准化。中心化（减去均值）使每个基因的均值为 0，使 PCA 关注细胞间的表达变化而非基因的平均表达水平。标准化（除以标准差）使所有基因具有相同的方差尺度，避免高表达或高方差基因主导主成分分析。在单细胞 RNA-seq 数据中，不同基因的表达量和方差差异极大，如果不进行标准化，PCA 可能主要反映少数高表达基因的影响，而无法准确捕获细胞类型和状态之间的真实生物学差异。因此，中心化和标准化是获得稳定、可解释 PCA 结果的重要步骤。
+
+
+##### 问题5：UMAP 是一种非线性降维算法，其主要作用是将 PCA 后的高维细胞表达数据映射到二维或三维空间，同时尽可能保留细胞之间的邻近关系。在 UMAP 图中，如果两个 cluster 分得很开，可能说明什么？
+
+UMAP 是一种非线性降维算法，其主要作用是将 PCA 后的高维细胞表达数据映射到二维或三维空间，同时尽可能保留细胞之间的邻近关系。UMAP 本身不负责聚类，而是用于可视化细胞群体结构、细胞类型差异、发育轨迹以及批次整合效果。在单细胞 RNA-seq 分析中，UMAP 图中两个 cluster 分得较开，通常说明这两群细胞在高维表达空间中的邻近关系较少，转录组特征存在明显差异，可能对应不同的细胞类型、细胞状态或处理条件。然而 UMAP 主要保留局部结构，其全局距离不一定严格反映真实表达差异大小，因此不能仅根据 UMAP 上的距离远近判断差异程度。实际分析中还需要结合 marker 基因、差异表达分析以及批次效应评估进行解释。
+
+
+##### 问题6：FindAllMarkers步骤通过比较基因表达量寻找每个cluster的标记基因，其中涉及了假设检验的步骤。在Seurat中，默认的检验方法是什么？为什么Seurat选择这种方法进行假设检验？
+
+Seurat 默认使用 Wilcoxon。单细胞RNA测序数据具有高稀疏性、零膨胀、非正态分布和离群值较多等特点，而 t 检验要求数据近似正态且依赖均值和方差估计，因此容易受到这些特征影响。Wilcoxon rank-sum test 属于非参数检验，仅利用数据排序信息，不要求正态分布，对离群值更稳健，因此更适合作为单细胞差异表达分析的默认方法。
+
+
+
+
+
+
+
+
+
