@@ -18,7 +18,7 @@
 
 说明：
 
-- 早期部分作业不要求使用代码作答，因此可能没有 `src/` 或代码文件。
+- 早期作业 `01_032026` 不要求使用代码作答，因此没有 `src/` 或代码文件。
 - `02_040326/src/` 中主要是分题 `.R` 脚本。
 - 从 `03_041726/` 起，主要使用 Quarto `.qmd` 文档组织作答。
 - `_output/src/` 中的 HTML 文件适合直接打开阅读，用于快速复习代码、图表与文字结论。
@@ -29,7 +29,7 @@
 
 | 目录 | 内容概览 |
 | --- | --- |
-| `01_*` | 概率论基础：加法公式（Addition Rule）、德·摩根定律（De Morgan's Laws）、全概率公式（Law of Total Probability）、波利亚罐模型（Pólya's Urn Model）变体、超几何分布（Hypergeometric Distribution）、二项分布（Binomial Distribution）、贝叶斯定理（Bayes' Theorem）等。 |
+| `01_032026` | 概率论基础：加法公式（Addition Rule）、德·摩根定律（De Morgan's Laws）、全概率公式（Law of Total Probability）、波利亚罐模型（Pólya's Urn Model）变体、超几何分布（Hypergeometric Distribution）、二项分布（Binomial Distribution）、贝叶斯定理（Bayes' Theorem）等。 |
 | `02_040326` | 常见概率分布、抽样分布与置信区间：Poisson distribution、Exponential distribution、Normal distribution、sampling distribution、standard error、confidence interval 等。 |
 | `03_041726` | 假设检验基础：one-sample t-test、paired t-test、unpaired t-test、F-test、permutation test、Wilcoxon signed-rank test，以及对应的前提假设检查和基础可视化。 |
 | `04_050826` | 自动化假设检验流程、正态性与方差齐性判断、Student's / Welch's t-test、Wilcoxon rank-sum test、BH-FDR 校正、power analysis、one-way ANOVA、Tukey's HSD post-hoc test 等。 |
