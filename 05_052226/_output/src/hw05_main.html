@@ -2943,7 +2943,7 @@ Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&
 </div>
 <p><strong>统计推断与 ANOVA 原理</strong>：</p>
 <ul>
-<li><strong>ANOVA 的作用</strong>：这里的 <code>anova()</code> 用于比较两个<strong>嵌套模型）</strong>。它检验的 <span class="math inline">\(H_0\)</span> 是：复杂模型（加入二次项）相比于简单模型（仅有一次项），其残差平方和（RSS）的减少量仅仅是随机误差导致的。</li>
+<li><strong>ANOVA 的作用</strong>：这里的 <code>anova()</code> 用于比较两个<strong>嵌套模型</strong>。它检验的 <span class="math inline">\(H_0\)</span> 是：复杂模型（加入二次项）相比于简单模型（仅有一次项），其残差平方和（RSS）的减少量仅仅是随机误差导致的。</li>
 <li><strong>结果分析</strong>：观察 <code>anova()</code> 输出表中的 <code>Pr(&gt;F)</code> 值为 0.0260889，<span class="math inline">\(&lt; 0.05\)</span>，说明增加 <code>Age^2</code> 项显著降低了模型的预测误差。</li>
 <li><strong>最终结论</strong>：增加 <code>Age^2</code> 项显著改善了对雄性豹激素水平的预测（p 值显著）。这进一步验证了激素比值与年龄之间的关系是非线性的，且二次项的引入成功捕捉到了数据中的倒 U 型趋势。</li>
 </ul>
